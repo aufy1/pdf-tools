@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "system-ui", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background-color: #09090b;
+  color: #e4e4e7;
+}

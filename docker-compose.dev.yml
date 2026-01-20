@@ -1,0 +1,31 @@
+services:
+  frontend:
+    build:
+      target: dev
+    container_name: pdf-tool_frontend_dev
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./client/src:/app/src
+      - ./client/public:/app/public
+      - ./client/index.html:/app/index.html
+      - /app/node_modules
+    ports:
+       - "8098:5173" # Twój port
+
+  backend:
+    container_name: pdf-tool_backend_dev
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./server:/app
+    ports:
+      - "8000:8000"
+    # Sekcja GPU (odkomentuj jeśli masz Nvidię na devie)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

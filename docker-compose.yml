@@ -1,0 +1,23 @@
+services:
+  # --- FRONTEND (React) ---
+  frontend:
+    build: 
+      context: ./client
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  # --- BACKEND (Python AI) ---
+  backend:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    # Opcjonalnie: montowanie modeli AI, żeby nie pobierać ich co chwilę
+    volumes:
+      - ./server/models:/app/models

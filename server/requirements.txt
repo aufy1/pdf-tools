@@ -1,0 +1,12 @@
+fastapi==0.109.0
+uvicorn==0.27.0
+python-multipart==0.0.6
+pymupdf==1.23.8
+# Biblioteka do darmowego tłumaczenia (MVP)
+deep-translator==1.11.4 
+
+# Odkomentuj poniższe, gdy będziesz wdrażać lokalny model NLLB-200:
+# ctranslate2==3.24.0
+# sentencepiece==0.1.99
+# transformers==4.37.0
+# torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu

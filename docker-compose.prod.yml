@@ -1,0 +1,20 @@
+services:
+  frontend:
+    build:
+      target: prod
+    container_name: pdf-tool_frontend_prod
+    networks:
+      proxy_ext_net:
+        aliases:
+          - pdf-tool_frontend
+
+  backend:
+    container_name: pdf-tool_backend_prod
+    networks:
+      proxy_ext_net:
+        aliases:
+          - pdf-tool_api
+
+networks:
+  proxy_ext_net:
+    external: true
