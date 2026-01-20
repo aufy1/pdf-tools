@@ -1,23 +1,38 @@
 services:
-  # --- FRONTEND (React) ---
-  frontend:
-    build: 
-      context: ./client
-      dockerfile: Dockerfile
-    environment:
-      - NODE_ENV=${NODE_ENV:-production}
+  # --- NGINX ---
+  nginx:
+    image: nginx:alpine
+    container_name: pdf-tool_nginx
     restart: unless-stopped
     depends_on:
       - backend
+      - frontend
+    ports:
+       # Jeśli używasz docker-compose.dev.yml, porty są tam nadpisywane,
+       # ale tutaj warto zostawić domyślne mapowanie dla jasności
+       - "8098:80"
+    volumes:
+      # ZMIANA: Mapujemy lokalny folder ./outputs do kontenera
+      - ./outputs:/var/www/pdf_downloads
 
-  # --- BACKEND (Python AI) ---
+  # --- BACKEND ---
   backend:
-    build: 
+    build:
       context: ./server
       dockerfile: Dockerfile
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
-    # Opcjonalnie: montowanie modeli AI, żeby nie pobierać ich co chwilę
+    container_name: pdf-tool_backend
     volumes:
-      - ./server/models:/app/models
+      # ZMIANA: Ten sam folder ./outputs mapujemy do backendu
+      - ./outputs:/app/outputs
+      - ./server/fonts:/app/fonts
+
+  # --- FRONTEND ---
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: pdf-tool_frontend
+
+networks:
+  default:
+    name: pdf-tool-network

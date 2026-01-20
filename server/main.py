@@ -23,8 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "outputs"
+OUTPUT_DIR = "/app/outputs" 
+UPLOAD_DIR = "/app/uploads"
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -43,20 +44,23 @@ async def upload_file(file: UploadFile = File(...)):
 async def translate_document(filename: str, background_tasks: BackgroundTasks):
     input_path = os.path.join(UPLOAD_DIR, filename)
     output_filename = f"UA_{filename}"
+    # Zapisujemy bezpośrednio do współdzielonego wolumenu
     output_path = os.path.join(OUTPUT_DIR, output_filename)
 
     if not os.path.exists(input_path):
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Uruchamiamy proces tłumaczenia (synchronicznie dla uproszczenia w MVP, 
-    # docelowo w Celery/BackgroundTasks)
     try:
+        # Tutaj Twoja funkcja logic.py robi swoje i zapisuje plik do output_path
         process_pdf_translation(input_path, output_path)
+        
         return {
             "status": "completed", 
             "original": filename, 
             "translated": output_filename,
-            "download_url": f"http://localhost:8000/download/{output_filename}"
+            # ZMIANA: Zwracamy link relatywny dla Nginx
+            # Nginx widzi /downloads/ -> mapuje na folder z plikami
+            "download_url": f"/downloads/{output_filename}" 
         }
     except Exception as e:
         print(f"Error: {e}")

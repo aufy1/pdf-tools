@@ -8,12 +8,12 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    host: true,
+    host: true, 
     port: 5173,
     strictPort: true,
     watch: {
       usePolling: true,
     },
-    allowedHosts: ['mermaid.aufy.pl', 'localhost']
-  }
+    allowedHosts: ['all', 'mermaid.aufy.pl', 'localhost', '192.168.81.101'],
+  },
 })

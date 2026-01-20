@@ -1,84 +1,110 @@
-# /server/logic.py
 import fitz  # PyMuPDF
 from translator import ai_translator
 import os
 
-FONT_PATH = "fonts/Roboto-Regular.ttf"
+# Ścieżka do pliku, który wgrasz ręcznie
+# Pamiętaj: wgraj "Roboto_Condensed-Regular.ttf" i zmień mu nazwę na "Roboto-Regular.ttf"
+FONT_PATH = "/app/fonts/Roboto-Regular.ttf"
 
 def process_pdf_translation(input_path: str, output_path: str):
-    """
-    Główna logika: Otwiera PDF, iteruje po blokach tekstu,
-    tłumaczy, czyści tło i nadrukowuje nowy tekst.
-    """
-    doc = fitz.open(input_path)
+    # 1. Sprawdzenie czy plik fizycznie istnieje (diagnostyka)
+    has_font = os.path.exists(FONT_PATH)
     
-    # Rejestracja czcionki z obsługą cyrylicy
-    font_name = "roboto"
-    if os.path.exists(FONT_PATH):
-        fitz.Font(fontname=font_name, fontfile=FONT_PATH, script="cyrl")
+    if not has_font:
+        print(f"BŁĄD: Nie widzę pliku {FONT_PATH}!")
+        print("Upewnij się, że plik jest w folderze server/fonts na Twoim komputerze.")
+        # Nie przerywamy, zadziała na domyślnej (bez polskich znaków), żebyś widział, że system żyje
     else:
-        print("UWAGA: Brak pliku czcionki! Cyrylica może nie działać.")
-        font_name = "helv" # Fallback (nie obsługuje UA dobrze)
+        print(f"SUKCES: Znaleziono czcionkę: {FONT_PATH}")
 
-    for page_num, page in enumerate(doc):
-        # 1. Pobieramy strukturę tekstu (JSON dict)
-        # flags=fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE
-        blocks = page.get_text("dict")["blocks"]
+    try:
+        doc = fitz.open(input_path)
+        
+        for page_num, page in enumerate(doc):
+            # 2. Rejestracja czcionki na KAŻDEJ stronie
+            # To jest kluczowe dla poprawnego wyświetlania cyrylicy
+            font_ref = "helv" # Domyślna (bezpiecznik)
+            
+            if has_font:
+                try:
+                    # Rejestrujemy czcionkę pod wewnętrzną nazwą "myroboto"
+                    page.insert_font(fontname="myroboto", fontfile=FONT_PATH)
+                    font_ref = "myroboto"
+                except Exception as e:
+                    print(f"Ostrzeżenie (strona {page_num}): Nie udało się zarejestrować czcionki: {e}")
 
-        for block in blocks:
-            if "lines" not in block:
+            # 3. Pobieranie bloków tekstu
+            try:
+                blocks = page.get_text("dict")["blocks"]
+            except Exception:
                 continue
 
-            for line in block["lines"]:
-                for span in line["spans"]:
-                    original_text = span["text"]
-                    bbox = span["bbox"] # [x0, y0, x1, y1]
-                    
-                    # Filtrowanie: Ignoruj liczby i bardzo krótkie teksty
-                    if len(original_text.strip()) < 2 or original_text.replace('.','').isdigit():
-                        continue
+            for block in blocks:
+                if "lines" not in block: continue
 
-                    # 2. Tłumaczenie
-                    translated_text = ai_translator.translate_text(original_text, target_lang='uk')
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        original_text = span["text"]
+                        bbox = span["bbox"] # [x0, y0, x1, y1]
+                        font_size = span["size"]
+                        
+                        # Filtrowanie śmieci (pojedyncze litery, same cyfry)
+                        if len(original_text.strip()) < 2 or original_text.replace('.','').isdigit():
+                            continue
 
-                    if translated_text == original_text:
-                        continue
+                        # 4. Tłumaczenie
+                        try:
+                            translated_text = ai_translator.translate_text(original_text, target_lang='uk')
+                        except Exception as e:
+                            print(f"Błąd tłumaczenia fragmentu: {e}")
+                            continue
 
-                    # 3. KROK CLEANING (Biały Korektor)
-                    # Rysujemy prostokąt w kolorze tła (zakładamy biały)
-                    # Padding -0.5, żeby nie zamazać linii tabeli obok
-                    clean_rect = fitz.Rect(bbox[0], bbox[1], bbox[2], bbox[3])
-                    page.draw_rect(clean_rect, color=(1, 1, 1), fill=(1, 1, 1), overlay=True)
+                        # Jeśli tłumaczenie puste lub identyczne -> pomiń
+                        if not translated_text or translated_text == original_text:
+                            continue
 
-                    # 4. KROK OVERLAY (Wstawianie tekstu)
-                    # Obliczamy rozmiar, żeby zmieścić się w pudełku
-                    insert_rect = fitz.Rect(bbox[0], bbox[1], bbox[2], bbox[3])
-                    
-                    # Logika Auto-Fit (Prosta)
-                    fontsize = span["size"]
-                    
-                    # Wstawiamy Textbox
-                    # align=0 (left), 1 (center) - bierzemy z oryginału jeśli możliwe, tu default left
-                    res = page.insert_textbox(
-                        insert_rect, 
-                        translated_text, 
-                        fontsize=fontsize, 
-                        fontname=font_name,
-                        color=(0, 0, 0), # Czarny
-                        align=0 
-                    )
+                        # 5. WHITEOUT (Zamazanie starego tekstu)
+                        # Rysujemy biały prostokąt z lekkim marginesem (-1 / +2 px)
+                        try:
+                            rect = fitz.Rect(bbox[0]-1, bbox[1], bbox[2]+2, bbox[3])
+                            page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1))
+                        except:
+                            pass
 
-                    # Jeśli res < 0, to tekst się nie zmieścił.
-                    # W wersji PRO tutaj byłaby pętla zmniejszająca fontsize
-                    if res < 0:
-                        # Próba ratunkowa: mniejszy font
-                        page.insert_textbox(
-                            insert_rect, 
-                            translated_text, 
-                            fontsize=fontsize * 0.8, 
-                            fontname=font_name,
-                            color=(0, 0, 0)
-                        )
+                        # 6. INSERT (Wstawienie nowego tekstu)
+                        try:
+                            # Próba wstawienia tekstu
+                            res = page.insert_textbox(
+                                rect, 
+                                translated_text, 
+                                fontsize=font_size, 
+                                fontname=font_ref, # Używamy "myroboto" lub "helv"
+                                color=(0, 0, 0),   # Czarny tekst
+                                align=0            # Wyrównanie do lewej
+                            )
+                            
+                            # Logika "Auto-Shrink": Jeśli tekst się nie mieści (res < 0),
+                            # próbujemy go wstawić ponownie, ale z mniejszą czcionką (70%)
+                            if res < 0:
+                                page.insert_textbox(
+                                    rect, 
+                                    translated_text, 
+                                    fontsize=font_size * 0.7, 
+                                    fontname=font_ref,
+                                    color=(0, 0, 0),
+                                    align=0
+                                )
+                        except Exception as e:
+                            # Ignorujemy błąd pojedynczego boksu, żeby reszta strony się zrobiła
+                            print(f"Błąd wstawiania tekstu w boksie: {e}")
 
-    doc.save(output_path)
-    doc.close()
+        # Zapisz wynik
+        doc.save(output_path)
+        doc.close()
+        print(f"Zakończono przetwarzanie: {output_path}")
+        return True
+
+    except Exception as e:
+        print(f"CRITICAL ERROR (cały dokument): {e}")
+        # Tu rzucamy błąd wyżej, żeby API wiedziało, że coś poszło bardzo nie tak
+        raise e
