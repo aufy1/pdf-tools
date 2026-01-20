@@ -117,6 +117,11 @@ function App() {
           )}
         </main>
       </div>
+      <footer className="h-6 bg-zinc-950 border-t border-zinc-800 flex items-center justify-center shrink-0 z-50">
+        <p className="text-[10px] text-zinc-600 font-medium tracking-wide uppercase">
+          Designed and developed by <span className="text-zinc-400">Szymon Zdanowicz</span> • <a href="mailto:kontakt@aufy.pl" className="hover:text-indigo-400 transition-colors">kontakt@aufy.pl</a>
+        </p>
+      </footer>
     </div>
   );
 }

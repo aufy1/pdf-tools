@@ -1,4 +1,5 @@
 services:
+  # --- NGINX (Brama) ---
   nginx:
     image: nginx:alpine
     container_name: pdf-tool_nginx
@@ -7,10 +8,14 @@ services:
       - backend
       - frontend
     ports:
-       - "8098:80"
+      - "8098:80"
     volumes:
-      # Nginx czyta z lokalnego ./outputs
       - ./outputs:/var/www/pdf_downloads
+    networks:
+      default:
+      proxy_ext_net:
+        aliases:
+          - pdf-tool_nginx
 
   # --- BACKEND ---
   backend:
@@ -21,6 +26,8 @@ services:
     volumes:
       - ./outputs:/data/outputs
       - ./server/fonts:/app/fonts
+    networks:
+      - default
 
   # --- FRONTEND ---
   frontend:
@@ -28,7 +35,13 @@ services:
       context: ./client
       dockerfile: Dockerfile
     container_name: pdf-tool_frontend
+    networks:
+      - default
 
+# Definicja sieci
 networks:
   default:
     name: pdf-tool-network
+  
+  proxy_ext_net:
+    external: true

@@ -14,6 +14,6 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
-    allowedHosts: ['all', 'mermaid.aufy.pl', 'localhost', '192.168.81.101'],
+    allowedHosts: ['all', 'pdf-tools.aufy.pl', 'localhost', '192.168.81.101'],
   },
 })

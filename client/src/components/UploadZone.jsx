@@ -49,7 +49,7 @@ const UploadZone = ({ onFileSelected }) => {
             </div>
             <div className="flex flex-col items-center gap-2 text-zinc-500">
                 <Zap size={18}/>
-                <span className="text-[10px] uppercase font-bold tracking-widest">AI Power</span>
+                <span className="text-[10px] uppercase font-bold tracking-widest">AI Powered</span>
             </div>
         </div>
       </div>

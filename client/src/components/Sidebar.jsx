@@ -4,9 +4,9 @@ import { FileText, Clock, ChevronRight } from 'lucide-react';
 const Sidebar = () => {
   // Mock data
   const history = [
-    { id: 1, name: 'Instrukcja_Obslugi_V1.pdf', date: '10 min temu', status: 'done' },
-    { id: 2, name: 'Specyfikacja_Tech.pdf', date: '2 godz. temu', status: 'done' },
-    { id: 3, name: 'Procedura_BHP.pdf', date: 'Wczoraj', status: 'error' },
+    { id: 1, name: 'cos.pdf', date: '10 min temu', status: 'done' },
+    { id: 2, name: 'test.pdf', date: '2 godz. temu', status: 'done' },
+    { id: 3, name: 'test.pdf', date: 'Wczoraj', status: 'error' },
   ];
 
   return (

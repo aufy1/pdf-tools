@@ -17,8 +17,8 @@ const Header = ({
         <div className="bg-indigo-500/10 p-2 rounded-lg border border-indigo-500/20">
             <Layers className="w-5 h-5 text-indigo-500" />
         </div>
-        <span className="text-white font-bold tracking-tight text-lg">
-          DocTranslator <span className="text-indigo-500">AI</span>
+        <span className="text-white font-bold tracking-tight text-xl">
+          PDF <span className="text-indigo-500">Tools</span>   
         </span>
       </div>
       
