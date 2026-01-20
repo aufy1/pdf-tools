@@ -33,7 +33,7 @@ const UploadZone = ({ onFileSelected }) => {
         
         <div className="space-y-3 z-10">
           <h3 className="text-3xl font-bold text-white tracking-tight">Wgraj instrukcję</h3>
-          <p className="text-zinc-500 text-sm max-w-xs mx-auto">Obsługujemy pliki PDF oraz eksporty z CorelDRAW. Zachowujemy układ tabel.</p>
+          <p className="text-zinc-500 text-sm max-w-xs mx-auto">Obsługuje tylko pliki PDF</p>
         </div>
 
         <label className="z-10 mt-2 px-10 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-900/20 transition-all hover:-translate-y-1 cursor-pointer">
@@ -45,7 +45,7 @@ const UploadZone = ({ onFileSelected }) => {
         <div className="flex gap-8 mt-4 pt-8 border-t border-zinc-800/50 w-full justify-center opacity-60">
             <div className="flex flex-col items-center gap-2 text-zinc-500">
                 <FileType size={18}/>
-                <span className="text-[10px] uppercase font-bold tracking-widest">PDF / CDR</span>
+                <span className="text-[10px] uppercase font-bold tracking-widest">PDF</span>
             </div>
             <div className="flex flex-col items-center gap-2 text-zinc-500">
                 <Zap size={18}/>
