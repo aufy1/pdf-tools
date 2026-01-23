@@ -4,7 +4,7 @@ import { Layers, Upload, Play, Settings, Split, Maximize, Loader2, FileType } fr
 const Header = ({ 
   onUploadClick, 
   onProcessClick, 
-  onConvertClick, // <--- NOWY PROP
+  onConvertClick,
   processingStatus, 
   viewMode, 
   setViewMode,

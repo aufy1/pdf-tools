@@ -2,7 +2,7 @@ import os
 import shutil
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from logic import process_pdf_translation
+from logic import process_pdf_translation, convert_pdf_to_word
 
 app = FastAPI()
 
