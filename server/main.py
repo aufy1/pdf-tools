@@ -60,3 +60,32 @@ async def translate_document(filename: str, background_tasks: BackgroundTasks):
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/convert/to-word/{filename}")
+async def convert_document_to_word(filename: str):
+    input_path = os.path.join(UPLOAD_DIR, filename)
+    
+    # Zmiana rozszerzenia pliku wyjściowego na .docx
+    base_name = os.path.splitext(filename)[0]
+    output_filename = f"{base_name}.docx"
+    output_path = os.path.join(OUTPUT_DIR, output_filename)
+
+    if not os.path.exists(input_path):
+        raise HTTPException(status_code=404, detail="File not found. Please upload first.")
+
+    try:
+        # Uruchomienie logiki konwersji
+        # Uwaga: pdf2docx jest procesem synchronicznym. 
+        # Przy dużym ruchu warto użyć background_tasks lub run_in_threadpool.
+        convert_pdf_to_word(input_path, output_path)
+        
+        return {
+            "status": "completed", 
+            "original": filename, 
+            "converted": output_filename,
+            # Link pasuje do Twojego wolumenu w Nginx
+            "download_url": f"/downloads/{output_filename}" 
+        }
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

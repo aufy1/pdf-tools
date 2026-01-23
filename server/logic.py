@@ -11,7 +11,9 @@ FONT_PATHS = {
     "bold_italic": "/app/fonts/Roboto_Condensed-BoldItalic.ttf"
 }
 
-# Ładowanie globalne
+# Próg łączenia w pikselach
+MERGE_DISTANCE = 12.0 
+
 GLOBAL_FONT_BUFFERS = {}
 print("SYSTEM: Ładowanie czcionek...")
 for key, path in FONT_PATHS.items():
@@ -29,30 +31,101 @@ def srgb_to_rgb(srgb_int):
     b = (srgb_int & 255) / 255.0
     return (r, g, b)
 
-def get_line_style(spans):
-    if not spans: return 11, 0, 0
-    style_counts = {}
-    for s in spans:
-        txt = s["text"].strip()
-        if not txt: continue
-        key = (s["size"], s["flags"], s["color"])
-        style_counts[key] = style_counts.get(key, 0) + len(txt)
-    if not style_counts:
-        return spans[0]["size"], spans[0]["flags"], spans[0]["color"]
-    best_style = max(style_counts, key=style_counts.get)
-    return best_style[0], best_style[1], best_style[2]
-
 def should_translate(text):
     text = text.strip()
     if len(text) < 2: return False
     if text.replace('.', '').replace(',', '').replace(' ', '').isdigit(): return False
-    
-    # Rozszerzona lista słów kluczowych, których nie ruszamy
-    keywords = ["PIT", "CIT", "NIP", "PESEL", "REGON", "KRS", "IP", "PWA", "RUB"]
-    if any(k in text for k in keywords) and len(text) < 15: return False
-    
+    keywords = ["PIT", "CIT", "NIP", "PESEL", "REGON", "KRS", "IP", "PWA", "RUB", "TAB", "RYS"]
+    if any(k in text.upper() for k in keywords) and len(text) < 15: return False
     if not re.search(r'[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]', text): return False
     return True
+
+def get_dominant_style(spans, registered_fonts):
+    """
+    Określa dominujący styl (czcionkę, rozmiar, kolor) dla grupy spanów.
+    Bierzemy styl, który zajmuje najwięcej znaków w grupie.
+    """
+    if not spans: return None
+    
+    # Zliczamy wystąpienia stylów
+    style_counts = {}
+    
+    for s in spans:
+        txt_len = len(s["text"].strip())
+        if txt_len == 0: continue
+        
+        # Klucz stylu: (flags, size, color)
+        key = (s["flags"], s["size"], s["color"])
+        style_counts[key] = style_counts.get(key, 0) + txt_len
+        
+    if not style_counts:
+        # Fallback do pierwszego
+        s = spans[0]
+        best_key = (s["flags"], s["size"], s["color"])
+    else:
+        best_key = max(style_counts, key=style_counts.get)
+        
+    flags, size, color = best_key
+    
+    # Mapowanie flag na nazwę fontu
+    is_bold = bool(flags & 2**4)
+    is_italic = bool(flags & 2**1)
+    
+    style_name = "regular"
+    if is_bold and is_italic: style_name = "bold_italic"
+    elif is_bold: style_name = "bold"
+    elif is_italic: style_name = "italic"
+    
+    font_ref = registered_fonts.get(style_name, registered_fonts.get("regular"))
+    
+    return {
+        "font": font_ref,
+        "size": size,
+        "color": srgb_to_rgb(color),
+        "flags": flags
+    }
+
+def merge_spans_by_distance(spans, threshold=12.0):
+    """
+    Kluczowa funkcja: łączy spany, jeśli są blisko siebie (<= threshold).
+    Zwraca listę grup (klastrów).
+    """
+    if not spans: return []
+    
+    # Sortujemy spany od lewej do prawej, żeby logika dystansu działała poprawnie
+    sorted_spans = sorted(spans, key=lambda s: s["bbox"][0])
+    
+    groups = []
+    current_group = [sorted_spans[0]]
+    
+    for i in range(1, len(sorted_spans)):
+        prev = current_group[-1]
+        curr = sorted_spans[i]
+        
+        # Obliczamy dystans: X początku obecnego - X końca poprzedniego
+        distance = curr["bbox"][0] - prev["bbox"][2]
+        
+        if distance <= threshold:
+            # Są blisko - dodajemy do obecnej grupy
+            current_group.append(curr)
+        else:
+            # Są daleko - zamykamy grupę i otwieramy nową
+            groups.append(current_group)
+            current_group = [curr]
+            
+    groups.append(current_group)
+    return groups
+
+def get_union_rect(group_spans):
+    """Oblicza wspólny prostokąt (bbox) dla grupy spanów."""
+    if not group_spans: return fitz.Rect(0,0,0,0)
+    
+    x0 = min(s["bbox"][0] for s in group_spans)
+    y0 = min(s["bbox"][1] for s in group_spans)
+    x1 = max(s["bbox"][2] for s in group_spans)
+    y1 = max(s["bbox"][3] for s in group_spans)
+    
+    return fitz.Rect(x0, y0, x1, y1)
 
 def process_pdf_translation(input_path: str, output_path: str):
     
@@ -62,14 +135,7 @@ def process_pdf_translation(input_path: str, output_path: str):
         doc.save(output_path)
         return
 
-    try:
-        doc_src = fitz.open(input_path)
-        pdf_bytes = doc_src.tobytes(garbage=4, deflate=True)
-        doc_src.close()
-        doc = fitz.open("pdf", pdf_bytes)
-    except Exception as e:
-        print(f"Błąd PDF: {e}")
-        raise e
+    doc = fitz.open(input_path)
 
     for page_num, page in enumerate(doc):
         prefix = f"p{page_num}"
@@ -92,125 +158,120 @@ def process_pdf_translation(input_path: str, output_path: str):
             if "lines" not in block: continue
 
             for line in block["lines"]:
-                full_text = "".join([s["text"] for s in line["spans"]])
+                # 1. Grupujemy spany używając logiki 12 pikseli
+                span_groups = merge_spans_by_distance(line["spans"], threshold=MERGE_DISTANCE)
                 
-                if not should_translate(full_text):
-                    continue
-
-                font_size, flags, color_int = get_line_style(line["spans"])
-                text_color = srgb_to_rgb(color_int)
-                
-                is_bold = bool(flags & 2**4)
-                is_italic = bool(flags & 2**1)
-                
-                style_key = "regular"
-                if is_bold and is_italic: style_key = "bold_italic"
-                elif is_bold: style_key = "bold"
-                elif is_italic: style_key = "italic"
-                
-                if style_key not in registered_fonts:
-                    if is_bold and "bold" in registered_fonts: style_key = "bold"
-                    else: style_key = "regular"
-                
-                font_ref = registered_fonts.get(style_key, registered_fonts.get("regular"))
-
-                try:
-                    translated_text = ai_translator.translate_text(full_text, target_lang='uk')
-                except: continue
-
-                if not translated_text or translated_text == full_text: continue
-
-                bbox = line["bbox"]
-                clean_rect = fitz.Rect(bbox[0], bbox[1], bbox[2], bbox[3])
-
-                operations.append({
-                    "clean_rect": clean_rect,
-                    "bbox": bbox,
-                    "text": translated_text,
-                    "orig_size": font_size,
-                    "font_ref": font_ref,
-                    "color": text_color
-                })
-
-        if not operations: continue
-
-        # --- WYKONANIE ---
-        
-        final_ops = []
-        for op in operations:
-            try:
-                page.insert_text(op["bbox"][:2], "t", fontname=op["font_ref"], fontsize=5, render_mode=1)
-                final_ops.append(op)
-            except: continue
-
-        if final_ops:
-            for op in final_ops:
-                page.add_redact_annot(op["clean_rect"], fill=False)
-            page.apply_redactions()
-
-            for op in final_ops:
-                bbox = op["bbox"]
-                
-                # --- KLUCZOWA KOREKTA POZYCJONOWANIA ---
-                
-                # Dynamiczny offset w dół.
-                # Bierzemy 25% wielkości czcionki (np. dla 10pt -> 2.5pt w dół)
-                # Ale nie mniej niż 2.0pt. To odsunie tekst od górnej krawędzi (sufitu).
-                y_correction = max(2.0, op["orig_size"] * 0.25)
-                
-                insert_rect = fitz.Rect(
-                    bbox[0], 
-                    bbox[1] + y_correction,     # Przesunięcie w dół (padding top)
-                    bbox[2] + 50,               
-                    # Ważne: Dolną krawędź też przesuwamy o tyle samo + mały margines (1.5),
-                    # żeby zachować wysokość oryginału i zmusić pętlę do zmniejszenia czcionki, 
-                    # jeśli tekst jest za duży.
-                    bbox[3] + y_correction + 1.5  
-                )
-                
-                current_size = op["orig_size"]
-                min_allowed_size = max(6, current_size * 0.6)
-                step = 0.5
-                success = False
-                
-                while current_size >= min_allowed_size:
-                    try:
-                        res = page.insert_textbox(
-                            insert_rect, 
-                            op["text"], 
-                            fontsize=current_size, 
-                            fontname=op["font_ref"], 
-                            color=op["color"],
-                            align=0
-                        )
-                        if res >= 0:
-                            success = True
-                            break 
-                    except:
-                        break
+                for group in span_groups:
+                    # Łączymy tekst grupy
+                    full_text = "".join([s["text"] for s in group])
                     
-                    current_size -= step
-
-                if not success:
+                    if not should_translate(full_text):
+                        continue
+                    
+                    # 2. Obliczamy wspólny obszar (Union Rect)
+                    union_rect = get_union_rect(group)
+                    
+                    # 3. Pobieramy styl (bierzemy dominujący w grupie)
+                    style = get_dominant_style(group, registered_fonts)
+                    
                     try:
-                        # Fallback z lekkim rozszerzeniem w dół
-                        expanded_rect = fitz.Rect(
-                            bbox[0], 
-                            bbox[1] + y_correction, 
-                            bbox[2] + 60, 
-                            bbox[3] + 15 
-                        )
-                        page.insert_textbox(
-                            expanded_rect, 
-                            op["text"], 
-                            fontsize=min_allowed_size,
-                            fontname=op["font_ref"], 
-                            color=op["color"],
-                            align=0
-                        )
-                    except:
-                        pass
+                        translated_text = ai_translator.translate_text(full_text, target_lang='uk')
+                    except: continue
+
+                    if not translated_text or translated_text == full_text: continue
+
+                    operations.append({
+                        "rect": union_rect,      # Gdzie wstawić
+                        "text": translated_text, # Co wstawić
+                        "style": style,          # Jak wstawić
+                        "orig_text": full_text
+                    })
+
+        # --- WYKONANIE ZMIAN NA STRONIE ---
+        if not operations: continue
+        
+        # Krok 1: Ukrycie oryginału i wyczyszczenie tła
+        for op in operations:
+            # Dodajemy redakcję (biały prostokąt) dokładnie na union_rect
+            page.add_redact_annot(op["rect"], fill=False) 
+            
+            # (Opcjonalnie) Wstawiamy mikrotekst dla zachowania "Searchable PDF"
+            try:
+                page.insert_text((op["rect"].x0, op["rect"].y1), " ", 
+                                 fontname=op["style"]["font"], fontsize=5, render_mode=1)
+            except: pass
+
+        page.apply_redactions()
+
+        # Krok 2: Wstawianie nowego tekstu z Word Wrap
+        for op in operations:
+            rect = op["rect"]
+            
+            # Lekka korekta wysokości (padding), żeby tekst nie dotykał linii tabeli
+            # Rozszerzamy minimalnie w dół (np. 2px), bo ukraiński tekst bywa wyższy
+            insert_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1 + 3)
+            
+            current_size = op["style"]["size"]
+            min_size = 5.0
+            step = 0.5
+            
+            # Pętla dopasowania rozmiaru czcionki
+            while current_size >= min_size:
+                try:
+                    # insert_textbox zwraca ujemną wartość, jeśli tekst się nie zmieścił
+                    res = page.insert_textbox(
+                        insert_rect, 
+                        op["text"], 
+                        fontsize=current_size, 
+                        fontname=op["style"]["font"], 
+                        color=op["style"]["color"],
+                        align=0, # 0 = Left (zazwyczaj najlepsze wewnątrz zwartej grupy), 1 = Center
+                        expandtabs=0
+                    )
+                    
+                    if res >= 0: # Udało się zmieścić
+                        break
+                except:
+                    break
+                
+                current_size -= step
+            
+            # Jeśli pętla nie znalazła miejsca, wstawiamy na siłę małą czcionką
+            if current_size < min_size:
+                 try:
+                    page.insert_textbox(
+                        insert_rect, 
+                        op["text"], 
+                        fontsize=min_size, 
+                        fontname=op["style"]["font"], 
+                        color=op["style"]["color"],
+                        align=0
+                    )
+                 except: pass
 
     doc.save(output_path)
     doc.close()
     print(f"Zapisano: {output_path}")
+
+
+def convert_pdf_to_word(input_path: str, output_path: str):
+    """
+    Konwertuje plik PDF na format DOCX.
+    """
+    cv = None
+    try:
+        print(f"SYSTEM: Rozpoczynam konwersję PDF->DOCX: {input_path}")
+        # Inicjalizacja konwertera
+        cv = Converter(input_path)
+        
+        # Konwersja (start=0, end=None oznacza wszystkie strony)
+        cv.convert(output_path, start=0, end=None)
+        
+        print(f"SYSTEM: Zapisano DOCX: {output_path}")
+    except Exception as e:
+        print(f"ERR: Błąd konwersji do Worda: {e}")
+        raise e
+    finally:
+        # Bardzo ważne: zamykamy konwerter, aby zwolnić plik
+        if cv:
+            cv.close()

@@ -4,7 +4,6 @@ import Sidebar from './components/Sidebar';
 import UploadZone from './components/UploadZone';
 import PreviewPane from './components/PreviewPane';
 
-
 const API_URL = "/api";
 
 function App() {
@@ -16,13 +15,11 @@ function App() {
 
   // 1. Obsługa wgrania pliku
   const handleFileSelect = async (file) => {
-    // Lokalny podgląd
     const url = URL.createObjectURL(file);
     setCurrentFile({ name: file.name, url, rawFile: file });
     setTranslatedFileUrl(null);
     setStatus('uploading');
 
-    // Wysyłka na serwer
     const formData = new FormData();
     formData.append('file', file);
 
@@ -48,7 +45,6 @@ function App() {
     setProcessStep('Analiza struktury PDF...');
 
     try {
-        // Symulacja kroków dla UX (bo backend jest synchroniczny w MVP)
         const timer = setInterval(() => {
              setProcessStep(prev => prev === 'Analiza struktury PDF...' ? 'Tłumaczenie AI (Google)...' : 'Rekonstrukcja dokumentu...');
         }, 2000);
@@ -63,10 +59,7 @@ function App() {
         
         const data = await res.json();
         
-        // Ustawiamy URL do pobrania przetłumaczonego pliku
-        // Dodajemy timestamp, żeby uniknąć cache'owania przeglądarki
         setTranslatedFileUrl(`${data.download_url}?t=${Date.now()}`);
-        
         setStatus('done');
         setProcessStep('Gotowe!');
 
@@ -74,7 +67,45 @@ function App() {
         console.error(err);
         setStatus('error');
         setProcessStep('Błąd przetwarzania.');
-        alert("Błąd podczas tłumaczenia. Sprawdź logi backendu.");
+        alert("Błąd podczas tłumaczenia.");
+    }
+  };
+
+  // 3. NOWA FUNKCJA: Obsługa konwersji do Worda
+  const handleConvertToWord = async () => {
+    if (!currentFile) return;
+
+    setStatus('processing');
+    setProcessStep('Konwersja PDF do DOCX...');
+
+    try {
+        const res = await fetch(`${API_URL}/convert/to-word/${currentFile.name}`, {
+            method: 'POST'
+        });
+
+        if (!res.ok) throw new Error("Conversion failed");
+
+        const data = await res.json();
+
+        // Wymuszenie pobierania pliku
+        const downloadLink = document.createElement('a');
+        downloadLink.href = data.download_url; // Endpoint z Nginx
+        downloadLink.download = data.converted; // Sugerowana nazwa pliku
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+
+        setStatus('done');
+        setProcessStep('Pobieranie rozpoczęte!');
+        
+        // Po chwili wróć do idle, żeby można było coś jeszcze zrobić
+        setTimeout(() => setStatus('idle'), 2000);
+
+    } catch (err) {
+        console.error(err);
+        setStatus('error');
+        setProcessStep('Błąd konwersji.');
+        alert("Błąd podczas konwersji do Worda.");
     }
   };
 
@@ -90,6 +121,7 @@ function App() {
       <Header 
         onUploadClick={handleReset}
         onProcessClick={handleProcess}
+        onConvertClick={handleConvertToWord} // <--- Przekazujemy funkcję
         processingStatus={status}
         viewMode={viewMode}
         setViewMode={setViewMode}
@@ -104,12 +136,8 @@ function App() {
             <UploadZone onFileSelected={handleFileSelect} />
           ) : (
             <PreviewPane 
-              // Lewa strona: Oryginał
               fileUrl={currentFile.url}
-              
-              // Prawa strona: Jeśli gotowe, pokaż wynik z serwera, inaczej nic
               translatedFileUrl={translatedFileUrl} 
-              
               viewMode={viewMode}
               processingStatus={status}
               processStep={processStep}
