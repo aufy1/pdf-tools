@@ -1,6 +1,6 @@
 import os
 import logging
-from pdf_engine import process_pdf
+from pdf_rebuilder import process_pdf_rebuild
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ def process_pdf_translation(input_path: str, output_path: str, source_lang: str 
 
     logger.info(f"START: {input_path} -> {target_lang}")
     try:
-        process_pdf(input_path, output_path, source_lang, target_lang)
+        process_pdf_rebuild(input_path, output_path, source_lang, target_lang)
         logger.info("DONE")
     except Exception as e:
         logger.error(f"ENGINE FAIL: {e}")

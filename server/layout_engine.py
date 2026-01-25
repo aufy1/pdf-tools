@@ -1,9 +1,22 @@
+"""
+layout_engine.py
+
+Odpowiedzialność:
+1. Definicja struktur danych (BlockType, StyleInfo, ProcessedBlock).
+2. Analiza układu strony źródłowej (LayoutEngine).
+3. Grupowanie luźnych linii tekstu w logiczne bloki (akapity).
+4. Implementacja heurystyk językowych i geometrycznych do łączenia bloków.
+"""
+
 import fitz
 import re
 from typing import List, Dict, Tuple, Optional, Set, Any
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from translator import ai_translator
+
+# ==================================================================================
+# STRUKTURY DANYCH
+# ==================================================================================
 
 class BlockType(Enum):
     PARAGRAPH = auto()
@@ -33,6 +46,10 @@ class ProcessedBlock:
     density: float = 0.0
     original_spans: List[Dict[str, Any]] = field(default_factory=list)
 
+# ==================================================================================
+# SILNIK UKŁADU (LAYOUT ENGINE)
+# ==================================================================================
+
 class LayoutEngine:
     def __init__(self, page: fitz.Page):
         self.page = page
@@ -51,7 +68,6 @@ class LayoutEngine:
             r'^\W+$'
         ]
         self.LIST_PATTERN = re.compile(r'^(\d{1,3}[.)]|\-|\+|•|o)\s')
-        self.fonts_map: Dict[str, str] = {}
 
     def srgb_to_rgb(self, srgb_int: int) -> Tuple[float, float, float]:
         if not isinstance(srgb_int, int): return (0, 0, 0)
@@ -196,82 +212,56 @@ class LayoutEngine:
         for b in blocks:
             if id(b) in table_cell_ids:
                 continue
-
             for pattern in self.NO_TRANSLATE_PATTERNS:
                 if re.fullmatch(pattern, b.text.strip()):
                     b.block_type = BlockType.NO_TRANSLATE
                     break
-            
             if b.block_type == BlockType.NO_TRANSLATE:
                 continue
-
             if len(b.text.strip()) == 1 and not b.text.isalnum():
                 b.block_type = BlockType.ISOLATED_SYMBOL
                 continue
-
             if self.LIST_PATTERN.match(b.text.strip()):
                 b.block_type = BlockType.LIST_ITEM
                 continue
-
             b.block_type = BlockType.PARAGRAPH
-            
         return blocks
 
     def strategy_0_guard(self, b1: ProcessedBlock, b2: ProcessedBlock) -> Optional[str]:
         if abs(b1.bbox.x0 - b2.bbox.x0) > self.X_THRESHOLD:
-            return f"X_DIFF_TOO_LARGE ({abs(b1.bbox.x0 - b2.bbox.x0):.1f} > {self.X_THRESHOLD})"
-        
+            return f"X_DIFF"
         if (b2.bbox.x0 - b1.bbox.x1) > self.H_GAP_THRESHOLD:
-            return "HORIZONTAL_GAP_TOO_LARGE"
-
+            return "HORIZONTAL_GAP"
         h1, h2 = b1.bbox.height, b2.bbox.height
         if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 1.5:
-            return "HEIGHT_RATIO_MISMATCH"
-
+            return "HEIGHT_RATIO"
         if b1.density < self.DENSITY_THRESHOLD or b2.density < self.DENSITY_THRESHOLD:
-            return "LOW_TEXT_DENSITY"
-
+            return "LOW_DENSITY"
         if b1.char_width_avg > 0 and b2.char_width_avg > 0:
             ratio = max(b1.char_width_avg, b2.char_width_avg) / min(b1.char_width_avg, b2.char_width_avg)
             if ratio > 1.2:
-                return "CHAR_WIDTH_MISMATCH"
-
+                return "CHAR_WIDTH"
         if len(b1.text.strip()) <= 3 or len(b2.text.strip()) <= 3:
-            return "SHORT_TOKEN_DETECTED"
-
+            return "SHORT_TOKEN"
         if re.search(r'\d', b1.text) and re.search(r'\d', b2.text):
              if len(b1.text) < 10 or len(b2.text) < 10:
-                 return "NUMERIC_DATA_SEQUENCE"
-
+                 return "NUMERIC_SEQ"
         if self.LIST_PATTERN.match(b2.text.strip()):
-            return "NEW_LIST_ITEM_DETECTED"
-            
+            return "NEW_LIST"
         return None
 
     def strategy_2_linguistics(self, b1: ProcessedBlock, b2: ProcessedBlock) -> Tuple[bool, str]:
         t1 = b1.text.strip()
         t2 = b2.text.strip()
-        
-        if len(t1) <= 5 and len(t2) <= 5: 
-            return False, "BOTH_TOO_SHORT"
-        
-        if t1.isdigit() and t2.isdigit(): 
-            return False, "BOTH_NUMERIC"
-        
-        if any(c in "|;:" for c in t1 + t2): 
-            return False, "TABULAR_CHARS_DETECTED"
-        
+        if len(t1) <= 5 and len(t2) <= 5: return False, "BOTH_SHORT"
+        if t1.isdigit() and t2.isdigit(): return False, "BOTH_NUM"
+        if any(c in "|;:" for c in t1 + t2): return False, "TABULAR"
         if abs(b1.bbox.x0 - b2.bbox.x0) < 9.0:
-            if t1.endswith(('.', '?', '!', ':')): 
-                return False, "SENTENCE_END_DETECTED"
-            if t2 and t2[0].islower(): 
-                return True, "CONTINUATION_LOWERCASE"
-            if t1.endswith('-'): 
-                return True, "HYPHENATION"
-            if not t1.endswith('.'):
-                return True, "IMPLICIT_CONTINUATION"
-
-        return False, "LINGUISTIC_HEURISTIC_FAIL"
+            if t1.endswith(('.', '?', '!', ':')): return False, "SENT_END"
+            if t2 and t2[0].islower(): return True, "LOWERCASE"
+            if t1.endswith('-'): return True, "HYPHEN"
+            if not t1.endswith('.'): return True, "IMPLICIT"
+        return False, "FAIL"
 
     def merge_blocks(self, blocks: List[ProcessedBlock]) -> List[ProcessedBlock]:
         sorted_blocks = sorted(blocks, key=lambda b: (int(b.bbox.x0 / 20), b.bbox.y0))
@@ -300,22 +290,17 @@ class LayoutEngine:
 
                     if y_dist > self.Y_TOLERANCE:
                         if abs(cand.bbox.x0 - curr.bbox.x0) < 20:
-                            print(f"[LOG] Vertical Break: '{curr.text[:15]}...' vs '{cand.text[:15]}...' Dist: {y_dist:.1f}")
                             break 
                         continue
 
                     guard_reject = self.strategy_0_guard(curr, cand)
                     if guard_reject:
-                        print(f"[LOG] Guard REJECT: '{curr.text[:15]}...' + '{cand.text[:15]}...' -> {guard_reject}")
                         continue
 
-                    can_merge_ling, ling_reason = self.strategy_2_linguistics(curr, cand)
+                    can_merge_ling, _ = self.strategy_2_linguistics(curr, cand)
                     if can_merge_ling:
-                        print(f"[LOG] MERGE ACCEPT: '{curr.text[:15]}...' + '{cand.text[:15]}...' -> {ling_reason}")
                         best_idx = i
                         break
-                    else:
-                        print(f"[LOG] Linguistic REJECT: '{curr.text[:15]}...' + '{cand.text[:15]}...' -> {ling_reason}")
                 
                 if best_idx != -1:
                     nxt = sorted_blocks.pop(best_idx)
@@ -334,104 +319,4 @@ class LayoutEngine:
     def run(self) -> List[ProcessedBlock]:
         blocks = self.extract_blocks()
         blocks = self.classify_blocks(blocks)
-        final_blocks = self.merge_blocks(blocks)
-        return final_blocks
-
-def process_pdf(input_path: str, output_path: str, source_lang: str, target_lang: str) -> None:
-    doc = fitz.open(input_path)
-    font_paths = {
-        "regular": "/app/fonts/Roboto_Condensed-Regular.ttf",
-        "bold": "/app/fonts/Roboto_Condensed-Bold.ttf",
-        "italic": "/app/fonts/Roboto_Condensed-Italic.ttf",
-        "bold_italic": "/app/fonts/Roboto_Condensed-BoldItalic.ttf"
-    }
-    
-    font_buffers = {}
-    for key, path in font_paths.items():
-        try:
-            with open(path, "rb") as f:
-                font_buffers[key] = f.read()
-        except Exception: pass
-
-    for page_num, page in enumerate(doc):
-        font_map = {}
-        for k, v in font_buffers.items():
-            fname = f"F{page_num}_{k}"
-            try:
-                page.insert_font(fontname=fname, fontbuffer=v)
-                font_map[k] = fname
-            except Exception: pass
-            
-        engine = LayoutEngine(page)
-        blocks = engine.run()
-        
-        for b in blocks:
-            page.draw_rect(b.bbox, color=None, fill=(1, 1, 1), overlay=True)
-
-        for b in blocks:
-            text_to_insert = b.text
-            if b.block_type not in [BlockType.NO_TRANSLATE, BlockType.ISOLATED_SYMBOL] and b.text.strip():
-                try:
-                    text_to_insert = ai_translator.translate_text(
-                        b.text, source_lang.lower(), target_lang.lower()
-                    )
-                except Exception:
-                    text_to_insert = b.text
-
-            if not text_to_insert or not text_to_insert.strip():
-                continue
-
-            fitz_font = font_map.get(b.style.font_key, "helv")
-            insert_rect = fitz.Rect(b.bbox.x0, b.bbox.y0, b.bbox.x1, b.bbox.y1 + 2)
-            
-            fontsize = b.style.size
-            min_fs = 5.0
-            inserted = False
-            
-            curr_fs = fontsize
-            while curr_fs >= min_fs:
-                try:
-                    res = page.insert_textbox(
-                        insert_rect, 
-                        text_to_insert, 
-                        fontsize=curr_fs, 
-                        fontname=fitz_font, 
-                        color=b.style.color,
-                        align=b.style.align
-                    )
-                    if res >= 0: 
-                        inserted = True
-                        break
-                except Exception:
-                    pass
-                curr_fs -= 0.5
-            
-            if not inserted:
-                try:
-                    page.insert_textbox(
-                        insert_rect, 
-                        text_to_insert, 
-                        fontsize=min_fs, 
-                        fontname=fitz_font, 
-                        color=b.style.color,
-                        align=b.style.align
-                    )
-                except Exception: pass
-
-    doc.save(output_path)
-    doc.close()
-
-if __name__ == "__main__":
-    import sys
-    print("PDF Engine Standalone Test (Layout Guard Strict)")
-    i = "input.pdf"
-    o = "output.pdf"
-    if len(sys.argv) > 2:
-        i, o = sys.argv[1], sys.argv[2]
-    
-    print(f"Processing: {i} -> {o}")
-    try:
-        process_pdf(i, o, "PL", "UK")
-        print("Success.")
-    except Exception as e:
-        print(f"Error: {e}")
+        return self.merge_blocks(blocks)
