@@ -1,11 +1,5 @@
 """
 layout_engine.py
-
-Odpowiedzialność:
-1. Definicja struktur danych (BlockType, StyleInfo, ProcessedBlock).
-2. Analiza układu strony źródłowej (LayoutEngine).
-3. Grupowanie luźnych linii tekstu w logiczne bloki (akapity).
-4. Implementacja heurystyk językowych i geometrycznych do łączenia bloków.
 """
 
 import fitz
@@ -14,10 +8,7 @@ from typing import List, Dict, Tuple, Optional, Set, Any
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-# ==================================================================================
-# STRUKTURY DANYCH
-# ==================================================================================
-
+# ... (Definicje BlockType i StyleInfo bez zmian) ...
 class BlockType(Enum):
     PARAGRAPH = auto()
     TABLE_CELL = auto()
@@ -45,10 +36,7 @@ class ProcessedBlock:
     char_width_avg: float = 0.0
     density: float = 0.0
     original_spans: List[Dict[str, Any]] = field(default_factory=list)
-
-# ==================================================================================
-# SILNIK UKŁADU (LAYOUT ENGINE)
-# ==================================================================================
+    is_hard_boundary: bool = False 
 
 class LayoutEngine:
     def __init__(self, page: fitz.Page):
@@ -97,12 +85,12 @@ class LayoutEngine:
         elif flags & 2**4: font_key = "bold"
         elif flags & 2**1: font_key = "italic"
         
+        # Domyślny align=0 (Left). Zmienimy to dynamicznie w detekcji tabel.
         return StyleInfo(font_key, ref_span["size"], self.srgb_to_rgb(ref_span["color"]), flags, 0), avg_w
 
     def _create_block(self, spans: List[Dict[str, Any]]) -> Optional[ProcessedBlock]:
         full_text = "".join(s["text"] for s in spans).strip()
-        if not full_text: 
-            return None
+        if not full_text: return None
 
         x0 = min(s["bbox"][0] for s in spans)
         y0 = min(s["bbox"][1] for s in spans)
@@ -126,48 +114,39 @@ class LayoutEngine:
     def extract_blocks(self) -> List[ProcessedBlock]:
         raw_dict = self.page.get_text("dict", flags=fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE)
         blocks: List[ProcessedBlock] = []
-
         for b in raw_dict.get("blocks", []):
             if b.get("type") != 0: continue
-            
             for line in b.get("lines", []):
                 sorted_spans = sorted(line["spans"], key=lambda s: s["bbox"][0])
                 current_group: List[Dict[str, Any]] = []
                 last_x1 = -999.0
-
                 for span in sorted_spans:
                     text = span["text"]
                     x0 = span["bbox"][0]
-                    
                     is_gap_large = (last_x1 != -999.0 and (x0 - last_x1) > self.SPACES_THRESHOLD)
                     has_double_space = "  " in text
                     
-                    if is_gap_large:
-                        if current_group:
-                            nb = self._create_block(current_group)
-                            if nb: blocks.append(nb)
-                            current_group = []
+                    if is_gap_large and current_group:
+                        nb = self._create_block(current_group)
+                        if nb: blocks.append(nb)
+                        current_group = []
                     
                     if has_double_space and not is_gap_large:
                         sub_parts = re.split(r'(\s{2,})', text)
                         cursor_x = x0
                         char_w = (span["bbox"][2] - x0) / len(text) if len(text) > 0 else 0
-                        
                         for part in sub_parts:
                             if not part.strip():
                                 cursor_x += len(part) * char_w
                                 continue
-                            
                             part_width = len(part) * char_w
                             sub_span = span.copy()
                             sub_span["text"] = part
                             sub_span["bbox"] = (cursor_x, span["bbox"][1], cursor_x + part_width, span["bbox"][3])
-                            
                             if current_group:
                                 nb = self._create_block(current_group)
                                 if nb: blocks.append(nb)
                                 current_group = []
-                            
                             current_group.append(sub_span)
                             nb = self._create_block(current_group)
                             if nb: blocks.append(nb)
@@ -176,21 +155,44 @@ class LayoutEngine:
                     else:
                         current_group.append(span)
                         last_x1 = span["bbox"][2]
-
                 if current_group:
                     nb = self._create_block(current_group)
                     if nb: blocks.append(nb)
-
         return blocks
 
+    def _detect_physical_tables(self, blocks: List[ProcessedBlock]) -> None:
+        """
+        Wykrywa tabele i ustawia flagę centrowania (align=1).
+        """
+        try:
+            tables = self.page.find_tables(horizontal_strategy="lines", vertical_strategy="lines")
+            for tab in tables:
+                for cell in tab.header.cells + tab.cells:
+                    cell_rect = fitz.Rect(cell)
+                    for b in blocks:
+                        center_x = (b.bbox.x0 + b.bbox.x1) / 2
+                        center_y = (b.bbox.y0 + b.bbox.y1) / 2
+                        center_pt = fitz.Point(center_x, center_y)
+                        
+                        if center_pt in cell_rect:
+                            b.block_type = BlockType.TABLE_CELL
+                            b.bbox = cell_rect + (-2, -2, 2, 2)
+                            b.is_hard_boundary = True
+                            
+                            # NOWOŚĆ: Ustawiamy centrowanie (1 = CENTER)
+                            b.style.align = 1 
+        except Exception as e:
+            print(f"Table detection warning: {e}")
+
     def classify_blocks(self, blocks: List[ProcessedBlock]) -> List[ProcessedBlock]:
+        self._detect_physical_tables(blocks)
+        
         y_groups: Dict[int, List[ProcessedBlock]] = {}
         for b in blocks:
+            if b.block_type == BlockType.TABLE_CELL: continue
             y_k = int(b.bbox.y0 / 5)
             if y_k not in y_groups: y_groups[y_k] = []
             y_groups[y_k].append(b)
-        
-        table_cell_ids: Set[int] = set()
         
         for _, group in y_groups.items():
             if len(group) >= 2:
@@ -198,61 +200,40 @@ class LayoutEngine:
                 is_row = False
                 for i in range(len(x_positions) - 1):
                     if (x_positions[i+1] - x_positions[i]) > self.COLUMN_GAP_THRESHOLD:
-                        is_row = True
-                        break
+                        is_row = True; break
                 
                 has_numbers = any(re.search(r'\d', b.text) for b in group)
                 has_short = any(len(b.text.strip()) <= 3 for b in group)
-
                 if is_row or has_numbers or has_short:
-                    for b in group:
-                        b.block_type = BlockType.TABLE_CELL
-                        table_cell_ids.add(id(b))
+                    for b in group: b.block_type = BlockType.TABLE_CELL
 
         for b in blocks:
-            if id(b) in table_cell_ids:
-                continue
+            if b.block_type == BlockType.TABLE_CELL: continue
             for pattern in self.NO_TRANSLATE_PATTERNS:
-                if re.fullmatch(pattern, b.text.strip()):
-                    b.block_type = BlockType.NO_TRANSLATE
-                    break
-            if b.block_type == BlockType.NO_TRANSLATE:
-                continue
-            if len(b.text.strip()) == 1 and not b.text.isalnum():
-                b.block_type = BlockType.ISOLATED_SYMBOL
-                continue
-            if self.LIST_PATTERN.match(b.text.strip()):
-                b.block_type = BlockType.LIST_ITEM
-                continue
+                if re.fullmatch(pattern, b.text.strip()): b.block_type = BlockType.NO_TRANSLATE; break
+            if b.block_type == BlockType.NO_TRANSLATE: continue
+            if len(b.text.strip()) == 1 and not b.text.isalnum(): b.block_type = BlockType.ISOLATED_SYMBOL; continue
+            if self.LIST_PATTERN.match(b.text.strip()): b.block_type = BlockType.LIST_ITEM; continue
             b.block_type = BlockType.PARAGRAPH
         return blocks
 
     def strategy_0_guard(self, b1: ProcessedBlock, b2: ProcessedBlock) -> Optional[str]:
-        if abs(b1.bbox.x0 - b2.bbox.x0) > self.X_THRESHOLD:
-            return f"X_DIFF"
-        if (b2.bbox.x0 - b1.bbox.x1) > self.H_GAP_THRESHOLD:
-            return "HORIZONTAL_GAP"
+        if b1.is_hard_boundary or b2.is_hard_boundary: return "HARD_BOUNDARY"
+        if abs(b1.bbox.x0 - b2.bbox.x0) > self.X_THRESHOLD: return f"X_DIFF"
+        if (b2.bbox.x0 - b1.bbox.x1) > self.H_GAP_THRESHOLD: return "HORIZONTAL_GAP"
         h1, h2 = b1.bbox.height, b2.bbox.height
-        if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 1.5:
-            return "HEIGHT_RATIO"
-        if b1.density < self.DENSITY_THRESHOLD or b2.density < self.DENSITY_THRESHOLD:
-            return "LOW_DENSITY"
+        if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 1.5: return "HEIGHT_RATIO"
+        if b1.density < self.DENSITY_THRESHOLD or b2.density < self.DENSITY_THRESHOLD: return "LOW_DENSITY"
         if b1.char_width_avg > 0 and b2.char_width_avg > 0:
-            ratio = max(b1.char_width_avg, b2.char_width_avg) / min(b1.char_width_avg, b2.char_width_avg)
-            if ratio > 1.2:
-                return "CHAR_WIDTH"
-        if len(b1.text.strip()) <= 3 or len(b2.text.strip()) <= 3:
-            return "SHORT_TOKEN"
+            if max(b1.char_width_avg, b2.char_width_avg) / min(b1.char_width_avg, b2.char_width_avg) > 1.2: return "CHAR_WIDTH"
+        if len(b1.text.strip()) <= 3 or len(b2.text.strip()) <= 3: return "SHORT_TOKEN"
         if re.search(r'\d', b1.text) and re.search(r'\d', b2.text):
-             if len(b1.text) < 10 or len(b2.text) < 10:
-                 return "NUMERIC_SEQ"
-        if self.LIST_PATTERN.match(b2.text.strip()):
-            return "NEW_LIST"
+             if len(b1.text) < 10 or len(b2.text) < 10: return "NUMERIC_SEQ"
+        if self.LIST_PATTERN.match(b2.text.strip()): return "NEW_LIST"
         return None
 
     def strategy_2_linguistics(self, b1: ProcessedBlock, b2: ProcessedBlock) -> Tuple[bool, str]:
-        t1 = b1.text.strip()
-        t2 = b2.text.strip()
+        t1, t2 = b1.text.strip(), b2.text.strip()
         if len(t1) <= 5 and len(t2) <= 5: return False, "BOTH_SHORT"
         if t1.isdigit() and t2.isdigit(): return False, "BOTH_NUM"
         if any(c in "|;:" for c in t1 + t2): return False, "TABULAR"
@@ -266,54 +247,34 @@ class LayoutEngine:
     def merge_blocks(self, blocks: List[ProcessedBlock]) -> List[ProcessedBlock]:
         sorted_blocks = sorted(blocks, key=lambda b: (int(b.bbox.x0 / 20), b.bbox.y0))
         merged: List[ProcessedBlock] = []
-        
         while sorted_blocks:
             curr = sorted_blocks.pop(0)
-            
-            if curr.block_type != BlockType.PARAGRAPH:
-                merged.append(curr)
-                continue
+            if curr.block_type in [BlockType.TABLE_CELL, BlockType.ISOLATED_SYMBOL, BlockType.NO_TRANSLATE]:
+                merged.append(curr); continue
             
             merged_happened = True
             while merged_happened and sorted_blocks:
-                merged_happened = False
-                best_idx = -1
-                
+                merged_happened = False; best_idx = -1
                 for i, cand in enumerate(sorted_blocks):
-                    if cand.block_type != BlockType.PARAGRAPH:
-                        continue
-                        
+                    if cand.block_type in [BlockType.TABLE_CELL, BlockType.ISOLATED_SYMBOL, BlockType.NO_TRANSLATE]: continue
                     y_dist = cand.bbox.y0 - curr.bbox.y1
-                    
-                    if y_dist < -2.0: 
-                        continue
-
+                    if y_dist < -2.0: continue
                     if y_dist > self.Y_TOLERANCE:
-                        if abs(cand.bbox.x0 - curr.bbox.x0) < 20:
-                            break 
+                        if abs(cand.bbox.x0 - curr.bbox.x0) < 20: break 
                         continue
-
-                    guard_reject = self.strategy_0_guard(curr, cand)
-                    if guard_reject:
-                        continue
-
-                    can_merge_ling, _ = self.strategy_2_linguistics(curr, cand)
-                    if can_merge_ling:
-                        best_idx = i
-                        break
+                    if self.strategy_0_guard(curr, cand): continue
+                    can_merge, _ = self.strategy_2_linguistics(curr, cand)
+                    if can_merge: best_idx = i; break
                 
                 if best_idx != -1:
                     nxt = sorted_blocks.pop(best_idx)
                     sep = "" if curr.text.endswith("-") else " "
                     txt = curr.text[:-1] if curr.text.endswith("-") else curr.text
-                    
                     curr.text = txt + sep + nxt.text
                     curr.bbox.include_rect(nxt.bbox)
                     curr.original_spans.extend(nxt.original_spans)
                     merged_happened = True
-            
             merged.append(curr)
-            
         return merged
 
     def run(self) -> List[ProcessedBlock]:
