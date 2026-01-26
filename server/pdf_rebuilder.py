@@ -2,82 +2,35 @@
 pdf_rebuilder.py
 
 Odpowiedzialność:
-1. Rekonstrukcja dokumentu PDF (tworzenie nowych stron).
-2. Przenoszenie obrazów i grafiki wektorowej (zachowanie layoutu).
-3. Zarządzanie czcionkami (wsparcie dla Cyrylicy).
-4. Integracja z tłumaczem AI.
-5. Fizyczne wstawianie przetłumaczonego tekstu w odpowiednie miejsca.
+1. Orkiestracja procesu tłumaczenia.
+2. Wykorzystanie pdf_cleaner do przygotowania tła.
+3. Analiza układu z oryginału (LayoutEngine).
+4. Wstawianie przetłumaczonego tekstu na czyste tło.
 """
 
 import fitz
 import os
 import sys
-# Importujemy moduł silnika (zakładając, że plik nazywa się layout_engine.py)
 from layout_engine import LayoutEngine, BlockType
-# Import tłumacza (zgodnie z Twoim istniejącym kodem)
 from translator import ai_translator
-
-# ==================================================================================
-# SILNIK REKONSTRUKCJI (RECONSTRUCTION ENGINE)
-# ==================================================================================
-
-def transfer_images(source_page: fitz.Page, target_page: fitz.Page):
-    """Przenosi obrazy (bitmapy) z jednej strony na drugą."""
-    image_list = source_page.get_images(full=True)
-    for img in image_list:
-        try:
-            xref = img[0]
-            bbox = source_page.get_image_bbox(img)
-            # Pobieramy dane obrazu
-            image_bytes = source_page.parent.extract_image(xref)["image"]
-            target_page.insert_image(bbox, stream=image_bytes)
-        except Exception as e:
-            print(f"Warning transferring image: {e}")
-
-def transfer_drawings(source_page: fitz.Page, target_page: fitz.Page):
-    """
-    Kopiuje grafikę wektorową (tabele, linie). 
-    Zawiera zabezpieczenia przed błędami typów (None/Float).
-    """
-    drawings = source_page.get_drawings()
-    shape = target_page.new_shape()
-    
-    for d in drawings:
-        try:
-            # Rysowanie kształtów
-            for item in d["items"]:
-                cmd = item[0]
-                if cmd == "l":
-                    shape.draw_line(item[1], item[2])
-                elif cmd == "re":
-                    shape.draw_rect(item[1])
-                elif cmd == "c":
-                    shape.draw_bezier(item[1], item[2], item[3], item[4])
-
-            # Bezpieczne pobieranie właściwości (fix na fz_format_double)
-            raw_width = d.get("width")
-            # Jeśli width jest None, ustaw domyślne 1.0, jeśli jest liczbą, upewnij się że to float
-            width = float(raw_width) if (raw_width is not None) else 1.0
-
-            stroke = d.get("color") # Może być None
-            fill = d.get("fill")    # Może być None
-            
-            if stroke is not None:
-                shape.finish(color=stroke, fill=fill, width=width)
-            else:
-                shape.finish(fill=fill, width=width)
-                
-        except Exception as e:
-            # Ignorujemy drobne błędy rysowania, żeby nie przerywać procesu
-            continue
-            
-    shape.commit()
+from pdf_cleaner import create_clean_layout_pdf
 
 def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, target_lang: str) -> None:
-    src_doc = fitz.open(input_path)
-    tgt_doc = fitz.open()
+    temp_clean_path = "temp_clean_layout.pdf"
+    
+    print(f"1. Tworzenie czystego layoutu (klonowanie grafiki)...")
+    try:
+        # Krok 1: Stwórz kopię PDF pozbawioną tekstu, ale z zachowaną grafiką
+        create_clean_layout_pdf(input_path, temp_clean_path)
+    except Exception as e:
+        print(f"Błąd podczas czyszczenia PDF: {e}")
+        return
 
-    # Konfiguracja czcionek - ścieżki (dostosuj do środowiska Docker/Local)
+    # Otwieramy oryginał (do czytania tekstu) i czystego klona (do pisania)
+    src_doc = fitz.open(input_path)
+    tgt_doc = fitz.open(temp_clean_path)
+
+    # Konfiguracja czcionek - (Tutaj bez zmian, ładujemy je raz)
     font_paths = {
         "regular": "/app/fonts/Roboto_Condensed-Regular.ttf",
         "bold": "/app/fonts/Roboto_Condensed-Bold.ttf",
@@ -86,9 +39,8 @@ def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, tar
     }
     
     available_fonts = {}
-    fallback_path = "arial.ttf" # Fallback lokalny
+    fallback_path = "arial.ttf"
     
-    # Ładowanie dostępnych czcionek do pamięci
     for style, path in font_paths.items():
         if os.path.exists(path):
             with open(path, "rb") as f: available_fonts[style] = f.read()
@@ -98,15 +50,14 @@ def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, tar
             with open(fallback_path, "rb") as f:
                 blob = f.read()
                 available_fonts = {k: blob for k in font_paths.keys()}
-        else:
-            print("WARNING: No custom fonts found. Cyrillic support might fail.")
 
-    # Główna pętla po stronach
+    print(f"2. Przetwarzanie stron i tłumaczenie...")
+
     for page_num, src_page in enumerate(src_doc):
-        # 1. Tworzenie nowej, pustej strony o tych samych wymiarach
-        tgt_page = tgt_doc.new_page(width=src_page.rect.width, height=src_page.rect.height)
+        tgt_page = tgt_doc[page_num]
         
-        # 2. Rejestracja czcionek na nowej stronie
+        print(f"   -> Strona {page_num + 1}/{len(src_doc)}")
+
         font_map = {}
         primary_font = "helv"
         
@@ -118,21 +69,13 @@ def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, tar
                 primary_font = fname
             except Exception: pass
 
-        # 3. Kopiowanie warstwy wizualnej (bez tekstu)
-        transfer_drawings(src_page, tgt_page)
-        transfer_images(src_page, tgt_page)
-
-        # 4. Przetwarzanie tekstu (Extract -> Translate -> Insert)
-        # Używamy LayoutEngine z zaimportowanego pliku
         engine = LayoutEngine(src_page)
         blocks = engine.run() 
         
         for b in blocks:
-            # Pomijamy nietłumaczalne bloki
             text_to_insert = b.text
             if b.block_type not in [BlockType.NO_TRANSLATE, BlockType.ISOLATED_SYMBOL] and b.text.strip():
                 try:
-                    # Wywołanie zewnętrznego tłumacza
                     translated = ai_translator.translate_text(
                         b.text, source_lang.lower(), target_lang.lower()
                     )
@@ -142,19 +85,16 @@ def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, tar
             
             if not text_to_insert.strip(): continue
 
-            # Wybór czcionki
             fitz_font = font_map.get(b.style.font_key, primary_font)
             
-            # Lekkie poszerzenie ramki (padding), bo tekst tłumaczony może być dłuższy
             insert_rect = fitz.Rect(b.bbox.x0, b.bbox.y0, b.bbox.x1 + 10, b.bbox.y1 + 5)
             
             fontsize = b.style.size
             if fontsize < 5: fontsize = 5
             
-            inserted = False
             curr_fs = fontsize
+            inserted = False
             
-            # Algorytm dopasowania tekstu: zmniejszamy czcionkę, jeśli się nie mieści
             while curr_fs >= 5.0:
                 try:
                     res = tgt_page.insert_textbox(
@@ -171,7 +111,7 @@ def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, tar
                 except Exception: pass
                 curr_fs -= 0.5
             
-            # Fallback: jeśli insert_textbox zawiódł, wstawiamy tekst "na sztywno" w punkcie
+            # Fallback (insert_text)
             if not inserted:
                 try:
                     tgt_page.insert_text(
@@ -185,8 +125,14 @@ def process_pdf_rebuild(input_path: str, output_path: str, source_lang: str, tar
                     print(f"Failed to insert text block: {e}")
 
     src_doc.close()
-    tgt_doc.save(output_path)
+    
+    # Zapisz wynikowy plik
+    tgt_doc.save(output_path, garbage=4, deflate=True)
     tgt_doc.close()
+    
+    # Sprzątanie pliku tymczasowego
+    if os.path.exists(temp_clean_path):
+        os.remove(temp_clean_path)
 
 if __name__ == "__main__":
     i = "input.pdf"
@@ -194,7 +140,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         i, o = sys.argv[1], sys.argv[2]
     
-    print(f"Rebuilding PDF (Split Files): {i} -> {o}")
+    print(f"Rebuilding PDF (Clone Method): {i} -> {o}")
     try:
         process_pdf_rebuild(i, o, "PL", "UK")
         print("Success!")
