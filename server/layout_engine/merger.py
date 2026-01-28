@@ -3,19 +3,24 @@ from typing import List, Tuple, Optional
 from .models import ProcessedBlock, BlockType
 from .config import Config
 
+# layout_engine/merger.py
+
 def _strategy_0_guard(b1: ProcessedBlock, b2: ProcessedBlock) -> Optional[str]:
+    # --- ZASADY KRYTYCZNE (Zostawiamy) ---
     if b1.is_hard_boundary or b2.is_hard_boundary: return "HARD_BOUNDARY"
     if abs(b1.bbox.x0 - b2.bbox.x0) > Config.X_THRESHOLD: return f"X_DIFF"
     if (b2.bbox.x0 - b1.bbox.x1) > Config.H_GAP_THRESHOLD: return "HORIZONTAL_GAP"
+    
+    # --- ZASADY STYLE (Usuwamy/Poluzowujemy) ---
+    # Usuwamy sprawdzenie HEIGHT_RATIO (chyba że różnica jest gigantyczna, np. nagłówek vs tekst)
     h1, h2 = b1.bbox.height, b2.bbox.height
-    if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 1.5: return "HEIGHT_RATIO"
-    if b1.density < Config.DENSITY_THRESHOLD or b2.density < Config.DENSITY_THRESHOLD: return "LOW_DENSITY"
-    if b1.char_width_avg > 0 and b2.char_width_avg > 0:
-        if max(b1.char_width_avg, b2.char_width_avg) / min(b1.char_width_avg, b2.char_width_avg) > 1.2: return "CHAR_WIDTH"
-    if len(b1.text.strip()) <= 3 or len(b2.text.strip()) <= 3: return "SHORT_TOKEN"
-    if re.search(r'\d', b1.text) and re.search(r'\d', b2.text):
-         if len(b1.text) < 10 or len(b2.text) < 10: return "NUMERIC_SEQ"
+    if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 2.5: return "HUGE_SIZE_DIFF" # Zwiększamy tolerancję
+
+    # Usuwamy sprawdzenie CHAR_WIDTH i koloru - chcemy to łączyć!
+    
+    # --- ZASADY LOGICZNE (Zostawiamy) ---
     if Config.LIST_PATTERN.match(b2.text.strip()): return "NEW_LIST"
+    
     return None
 
 def _strategy_2_linguistics(b1: ProcessedBlock, b2: ProcessedBlock) -> Tuple[bool, str]:

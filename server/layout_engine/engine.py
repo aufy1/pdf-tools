@@ -15,7 +15,7 @@ class LayoutEngine:
         blocks = extract_blocks_from_page(self.page)
         
         # 2. Wykrywanie tabel fizycznych (modyfikuje bloki i ustawia TABLE_CELL)
-        detect_physical_tables(self.page, blocks)
+        blocks = detect_physical_tables(self.page, blocks)
         
         # 3. Klasyfikacja reszty (listy, paragrafy)
         blocks = classify_block_types(blocks)
