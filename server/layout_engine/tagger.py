@@ -32,9 +32,6 @@ class StyleTagger:
             flags = s["flags"]
             color = s["color"]
             
-            # Wykrywamy zmiany względem "poprzedniego" lub "bazowego"
-            # Uproszczenie: używamy tagów XML, np. <b>, <i>, <span color="...">
-            
             is_bold = (flags & 2**4)
             is_italic = (flags & 2**1)
             
@@ -55,7 +52,6 @@ class StyleTagger:
             if is_bold: closing.append("</b>")
             suffix = "".join(closing)
             
-            # Escapowanie znaków specjalnych HTML w tekście
             safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             output.append(f"{prefix}{safe_text}{suffix}")
             
@@ -67,11 +63,9 @@ class StyleTagger:
         """
         segments = []
         
-        # Regex do wyłapania tagów
         tokens = re.split(r'(</?b>|</?i>|<span[^>]*>|</span>)', text)
         
         current_flags = base_style.flags
-        # Resetujemy flagi bold/italic z bazowego stylu, będziemy je nakładać z tagów
         current_flags &= ~(2**4 | 2**1) 
         
         current_color = base_style.color # krotka (r,g,b)
@@ -104,7 +98,6 @@ class StyleTagger:
                 if len(color_stack) > 1: color_stack.pop()
                 current_color = color_stack[-1]
             else:
-                # To jest czysty tekst - odwracamy escape
                 clean_text = token.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
                 if clean_text:
                     segments.append(RichSegment(

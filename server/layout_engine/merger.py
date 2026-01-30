@@ -11,14 +11,9 @@ def _strategy_0_guard(b1: ProcessedBlock, b2: ProcessedBlock) -> Optional[str]:
     if abs(b1.bbox.x0 - b2.bbox.x0) > Config.X_THRESHOLD: return f"X_DIFF"
     if (b2.bbox.x0 - b1.bbox.x1) > Config.H_GAP_THRESHOLD: return "HORIZONTAL_GAP"
     
-    # --- ZASADY STYLE (Usuwamy/Poluzowujemy) ---
-    # Usuwamy sprawdzenie HEIGHT_RATIO (chyba że różnica jest gigantyczna, np. nagłówek vs tekst)
     h1, h2 = b1.bbox.height, b2.bbox.height
-    if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 2.5: return "HUGE_SIZE_DIFF" # Zwiększamy tolerancję
+    if min(h1, h2) > 0 and (max(h1, h2) / min(h1, h2)) > 2.5: return "HUGE_SIZE_DIFF"
 
-    # Usuwamy sprawdzenie CHAR_WIDTH i koloru - chcemy to łączyć!
-    
-    # --- ZASADY LOGICZNE (Zostawiamy) ---
     if Config.LIST_PATTERN.match(b2.text.strip()): return "NEW_LIST"
     
     return None
