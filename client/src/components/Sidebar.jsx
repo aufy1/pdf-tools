@@ -1,19 +1,53 @@
 import React from 'react';
-import { FileText, Clock, ChevronRight } from 'lucide-react';
+import { Languages, Combine, Scissors, Clock, ChevronRight, FileText } from 'lucide-react';
 
-const Sidebar = () => {
-  // Mock data
+const Sidebar = ({ activeTool, setActiveTool, onReset }) => {
+  // Mock data historii
   const history = [
-    { id: 1, name: 'to nie dziala.pdf', date: '10 min temu', status: 'done' },
-    { id: 2, name: 'jeszcze.pdf', date: '2 godz. temu', status: 'done' },
-    { id: 3, name: 'ale będzie.pdf', date: 'Wczoraj', status: 'error' },
+    { id: 1, name: 'raport_Q3.pdf', action: 'Tłumaczenie', status: 'done' },
+    { id: 2, name: 'faktury_merge.pdf', action: 'Łączenie', status: 'done' },
   ];
+
+  const tools = [
+    { id: 'translate', icon: Languages, label: 'Tłumacz (AI)' },
+    { id: 'merge', icon: Combine, label: 'Łącz PDF' },
+    { id: 'split', icon: Scissors, label: 'Dziel PDF' },
+  ];
+
+  const handleToolChange = (toolId) => {
+      setActiveTool(toolId);
+      onReset(); // Czyścimy obecny widok przy zmianie narzędzia
+  };
 
   return (
     <aside className="w-64 bg-zinc-950 border-r border-zinc-800 flex flex-col shrink-0 z-20">
+      
+      {/* MENU NARZĘDZI */}
       <div className="p-4 border-b border-zinc-800">
+        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Narzędzia</h3>
+        <div className="space-y-1">
+            {tools.map(tool => {
+                const Icon = tool.icon;
+                const isActive = activeTool === tool.id;
+                return (
+                    <button 
+                        key={tool.id}
+                        onClick={() => handleToolChange(tool.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm font-medium
+                        ${isActive ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border border-transparent'}`}
+                    >
+                        <Icon size={18} />
+                        {tool.label}
+                    </button>
+                )
+            })}
+        </div>
+      </div>
+
+      {/* HISTORIA */}
+      <div className="p-4 border-b border-zinc-800 flex-shrink-0">
         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-            <Clock size={12}/> Ostatnie pliki
+            <Clock size={12}/> Ostatnie akcje
         </h3>
       </div>
       
@@ -25,7 +59,7 @@ const Sidebar = () => {
                 </div>
                 <div className="overflow-hidden">
                     <p className="text-sm text-zinc-300 font-medium truncate">{file.name}</p>
-                    <p className="text-[10px] text-zinc-600">{file.date}</p>
+                    <p className="text-[10px] text-zinc-600">{file.action}</p>
                 </div>
                 <ChevronRight size={14} className="ml-auto text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity"/>
             </div>

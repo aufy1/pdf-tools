@@ -1,19 +1,32 @@
 import React from 'react';
-import { UploadCloud, FileType, Zap } from 'lucide-react';
+import { UploadCloud, FileType, Zap, Files } from 'lucide-react';
 
-const UploadZone = ({ onFileSelected }) => {
+const UploadZone = ({ onFileSelected, multiple }) => {
   
   const handleDrop = (e) => {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && file.type === 'application/pdf') {
-      onFileSelected(file);
+    // Pobieramy wszystkie upuszczone pliki i filtrujemy tylko PDFy
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(file => file.type === 'application/pdf');
+    
+    if (droppedFiles.length > 0) {
+      if (multiple) {
+        onFileSelected(droppedFiles); // Przekazujemy tablicę
+      } else {
+        onFileSelected(droppedFiles[0]); // Przekazujemy jeden plik
+      }
     }
   };
 
   const handleChange = (e) => {
-    const file = e.target.files[0];
-    if (file) onFileSelected(file);
+    const selectedFiles = Array.from(e.target.files);
+    
+    if (selectedFiles.length > 0) {
+      if (multiple) {
+        onFileSelected(selectedFiles);
+      } else {
+        onFileSelected(selectedFiles[0]);
+      }
+    }
   };
 
   return (
@@ -28,17 +41,32 @@ const UploadZone = ({ onFileSelected }) => {
         <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
         
         <div className="w-24 h-24 bg-zinc-950 rounded-3xl flex items-center justify-center shadow-2xl group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-500 border border-zinc-800 z-10">
-          <UploadCloud size={48} className="text-indigo-500" />
+          {multiple ? (
+            <Files size={48} className="text-emerald-500" />
+          ) : (
+            <UploadCloud size={48} className="text-indigo-500" />
+          )}
         </div>
         
         <div className="space-y-3 z-10">
-          <h3 className="text-3xl font-bold text-white tracking-tight">Wgraj dokument</h3>
-          <p className="text-zinc-500 text-sm max-w-xs mx-auto">Obsługuje tylko pliki PDF</p>
+          <h3 className="text-3xl font-bold text-white tracking-tight">
+            {multiple ? 'Wgraj dokumenty' : 'Wgraj dokument'}
+          </h3>
+          <p className="text-zinc-500 text-sm max-w-xs mx-auto">
+            {multiple ? 'Możesz zaznaczyć lub przeciągnąć kilka plików PDF' : 'Obsługuje tylko pliki PDF'}
+          </p>
         </div>
 
-        <label className="z-10 mt-2 px-10 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-xl shadow-indigo-900/20 transition-all hover:-translate-y-1 cursor-pointer">
-          Wybierz plik z dysku
-          <input type="file" className="hidden" accept=".pdf" onChange={handleChange} />
+        <label className={`z-10 mt-2 px-10 py-4 text-white rounded-xl text-sm font-bold shadow-xl transition-all hover:-translate-y-1 cursor-pointer
+            ${multiple ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/20'}`}>
+          {multiple ? 'Wybierz pliki z dysku' : 'Wybierz plik z dysku'}
+          <input 
+            type="file" 
+            className="hidden" 
+            accept=".pdf" 
+            multiple={multiple} // Kluczowe dla natywnego okna dialogowego
+            onChange={handleChange} 
+          />
         </label>
 
         {/* Footer icons */}
@@ -47,10 +75,12 @@ const UploadZone = ({ onFileSelected }) => {
                 <FileType size={18}/>
                 <span className="text-[10px] uppercase font-bold tracking-widest">PDF</span>
             </div>
-            <div className="flex flex-col items-center gap-2 text-zinc-500">
-                <Zap size={18}/>
-                <span className="text-[10px] uppercase font-bold tracking-widest">AI Powered</span>
-            </div>
+            {!multiple && (
+                <div className="flex flex-col items-center gap-2 text-zinc-500">
+                    <Zap size={18}/>
+                    <span className="text-[10px] uppercase font-bold tracking-widest">AI Powered</span>
+                </div>
+            )}
         </div>
       </div>
     </div>

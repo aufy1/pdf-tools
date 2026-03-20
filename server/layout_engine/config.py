@@ -1,7 +1,7 @@
 import re
 
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 class Config:
     X_THRESHOLD = 15.0
