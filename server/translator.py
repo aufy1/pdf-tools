@@ -31,7 +31,7 @@ class TranslatorEngine:
             text = text.replace(f"__PH{i}__", ph)
         return text
 
-    def translate_text(self, text: str, source_lang: str = 'pl', target_lang: str = 'uk') -> str:
+    def translate_text(self, text: str, source_lang: str, target_lang: str) -> str:
         if not text or not text.strip():
             return ""
         

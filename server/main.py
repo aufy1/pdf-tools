@@ -34,16 +34,21 @@ async def upload_file(file: UploadFile = File(...)):
     return {"filename": file.filename, "status": "uploaded"}
 
 @app.post("/translate/{filename}")
-async def translate_document(filename: str):
+async def translate_document(filename: str, target_lang: str = "uk"):
     input_path = os.path.join(UPLOAD_DIR, filename)
-    output_filename = f"UA_{filename}"
+    output_filename = f"{target_lang.upper()}_{filename}"
     output_path = os.path.join(OUTPUT_DIR, output_filename)
 
     if not os.path.exists(input_path):
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        process_pdf_translation(input_path, output_path, source_lang='PL', target_lang='UK')
+        process_pdf_translation(
+            input_path, 
+            output_path, 
+            source_lang='pl', 
+            target_lang=target_lang.lower()
+        )
         
         return {
             "status": "completed", 

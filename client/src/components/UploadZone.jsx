@@ -32,7 +32,7 @@ const UploadZone = ({ onFileSelected }) => {
         </div>
         
         <div className="space-y-3 z-10">
-          <h3 className="text-3xl font-bold text-white tracking-tight">Wgraj instrukcję</h3>
+          <h3 className="text-3xl font-bold text-white tracking-tight">Wgraj dokument</h3>
           <p className="text-zinc-500 text-sm max-w-xs mx-auto">Obsługuje tylko pliki PDF</p>
         </div>
 

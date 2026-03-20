@@ -1,5 +1,13 @@
-import React from 'react';
-import { Layers, Upload, Play, Settings, Split, Maximize, Loader2, FileType } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Layers, Upload, Play, Settings, Split, Maximize, Loader2, FileType, Check } from 'lucide-react';
+
+const LANGUAGES = [
+  { code: 'uk', label: 'Ukraiński', flag: '🇺🇦' },
+  { code: 'en', label: 'Angielski', flag: '🇬🇧' },
+  { code: 'de', label: 'Niemiecki', flag: '🇩🇪' },
+  { code: 'fr', label: 'Francuski', flag: '🇫🇷' },
+  { code: 'es', label: 'Hiszpański', flag: '🇪🇸' },
+];
 
 const Header = ({ 
   onUploadClick, 
@@ -10,8 +18,23 @@ const Header = ({
   setViewMode,
   hasFile 
 }) => {
+  const [selectedLang, setSelectedLang] = useState('uk');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsRef = useRef(null);
+
+  // Zamknij menu po kliknięciu poza
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setIsSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
-    <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-6 shrink-0 shadow-sm z-30">
+    <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-6 shrink-0 shadow-sm z-30 relative">
       
       {/* LOGO */}
       <div className="flex items-center gap-3">
@@ -31,9 +54,8 @@ const Header = ({
         
         {hasFile && (
             <>
-                {/* PRZYCISK TŁUMACZENIA */}
                 <button 
-                    onClick={onProcessClick} 
+                    onClick={() => onProcessClick(selectedLang)} 
                     disabled={processingStatus === 'processing'}
                     className={`flex items-center gap-2 px-6 py-2 text-xs font-bold rounded-lg shadow-lg transition-all border border-transparent
                     ${processingStatus === 'processing' 
@@ -41,10 +63,9 @@ const Header = ({
                         : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/20 hover:scale-105'}`}
                 >
                     {processingStatus === 'processing' ? <Loader2 size={16} className="animate-spin"/> : <Play size={16} fill="currentColor"/>}
-                    <span>{processingStatus === 'processing' ? 'PRZETWARZANIE...' : 'TŁUMACZ (AI)'}</span>
+                    <span>{processingStatus === 'processing' ? 'PRZETWARZANIE...' : `TŁUMACZ (${selectedLang.toUpperCase()})`}</span>
                 </button>
 
-                {/* NOWY PRZYCISK: WORD */}
                 <button 
                     onClick={onConvertClick} 
                     disabled={processingStatus === 'processing'}
@@ -52,7 +73,6 @@ const Header = ({
                     ${processingStatus === 'processing' 
                         ? 'bg-zinc-800 text-zinc-500 border-zinc-800 cursor-not-allowed' 
                         : 'bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border-blue-500/20 hover:border-blue-500/50'}`}
-                    title="Konwertuj do Word (DOCX)"
                 >
                     <FileType size={16} />
                     <span>DOCX</span>
@@ -72,9 +92,37 @@ const Header = ({
         
         <div className="h-6 w-px bg-zinc-800"></div>
 
-        <button className="text-zinc-500 hover:text-zinc-300 transition-colors">
-            <Settings size={20} />
-        </button>
+        {/* SETTINGS WITH DROPDOWN */}
+        <div className="relative" ref={settingsRef}>
+            <button 
+                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                className={`transition-colors ${isSettingsOpen ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+                <Settings size={20} className={processingStatus === 'processing' ? 'animate-spin-slow' : ''} />
+            </button>
+
+            {isSettingsOpen && (
+                <div className="absolute right-0 mt-3 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in duration-150">
+                    <div className="px-3 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Język docelowy</div>
+                    {LANGUAGES.map((lang) => (
+                        <button
+                            key={lang.code}
+                            onClick={() => {
+                                setSelectedLang(lang.code);
+                                setIsSettingsOpen(false);
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-300 hover:text-white"
+                        >
+                            <span className="flex items-center gap-2">
+                                <span>{lang.flag}</span>
+                                {lang.label}
+                            </span>
+                            {selectedLang === lang.code && <Check size={14} className="text-indigo-500" />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
       </div>
     </header>
   );

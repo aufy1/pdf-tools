@@ -1,11 +1,10 @@
 import os
 import logging
 from pdf_rebuilder import process_pdf_rebuild
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def process_pdf_translation(input_path: str, output_path: str, source_lang: str = 'PL', target_lang: str = 'UK') -> None:
+def process_pdf_translation(input_path: str, output_path: str, source_lang: str, target_lang: str) -> None:
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Missing file: {input_path}")
 

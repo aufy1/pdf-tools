@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, ArrowRight, Download } from 'lucide-react'; // Dodano ikonę Download
+import { Loader2, ArrowRight, Download } from 'lucide-react';
 
 const PreviewPane = ({ fileUrl, translatedFileUrl, viewMode, processingStatus, processStep }) => {
   return (
@@ -9,7 +9,7 @@ const PreviewPane = ({ fileUrl, translatedFileUrl, viewMode, processingStatus, p
       <div className={`flex flex-col border-r border-zinc-800 transition-all duration-500 ease-in-out ${viewMode === 'split' ? 'w-1/2' : 'w-full'}`}>
         <div className="h-10 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0">
           <span className="text-xs font-bold text-zinc-500 tracking-wider flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-zinc-600"></div> ORYGINAŁ (PL)
+            <div className="w-2 h-2 rounded-full bg-zinc-600"></div> ORYGINAŁ
           </span>
         </div>
         <div className="flex-1 bg-zinc-800/50 p-6 overflow-hidden relative">
@@ -23,10 +23,10 @@ const PreviewPane = ({ fileUrl, translatedFileUrl, viewMode, processingStatus, p
            
            <div className="h-10 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0">
               <span className="text-xs font-bold text-indigo-400 tracking-wider flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div> TŁUMACZENIE (UA)
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div> TŁUMACZENIE
               </span>
               
-              {/* NOWY PRZYCISK POBIERANIA */}
+              {/* PRZYCISK POBIERANIA */}
               {processingStatus === 'done' && translatedFileUrl && (
                   <a 
                     href={translatedFileUrl} 

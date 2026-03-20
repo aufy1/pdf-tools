@@ -13,7 +13,7 @@ function App() {
   const [status, setStatus] = useState('idle'); // 'idle' | 'uploading' | 'processing' | 'done' | 'error'
   const [processStep, setProcessStep] = useState('');
 
-  // 1. Obsługa wgrania pliku
+  // Obsługa wgrania pliku
   const handleFileSelect = async (file) => {
     const url = URL.createObjectURL(file);
     setCurrentFile({ name: file.name, url, rawFile: file });
@@ -37,19 +37,19 @@ function App() {
     }
   };
 
-  // 2. Obsługa procesu tłumaczenia
-  const handleProcess = async () => {
+  // Obsługa tlumaczenia
+const handleProcess = async (selectedLang) => {
     if (!currentFile) return;
     
     setStatus('processing');
-    setProcessStep('Analiza struktury PDF...');
+    setProcessStep(`Analiza struktury PDF... (Język: ${selectedLang.toUpperCase()})`); // Opcjonalnie: info dla usera
 
     try {
         const timer = setInterval(() => {
-             setProcessStep(prev => prev === 'Analiza struktury PDF...' ? 'Tłumaczenie AI (Google)...' : 'Rekonstrukcja dokumentu...');
+             setProcessStep(prev => prev.startsWith('Analiza') ? 'Tłumaczenie AI (Google)...' : 'Rekonstrukcja dokumentu...');
         }, 2000);
 
-        const res = await fetch(`${API_URL}/translate/${currentFile.name}`, {
+        const res = await fetch(`${API_URL}/translate/${currentFile.name}?target_lang=${selectedLang}`, {
             method: 'POST'
         });
 
@@ -71,7 +71,6 @@ function App() {
     }
   };
 
-  // 3. NOWA FUNKCJA: Obsługa konwersji do Worda
   const handleConvertToWord = async () => {
     if (!currentFile) return;
 
@@ -87,10 +86,9 @@ function App() {
 
         const data = await res.json();
 
-        // Wymuszenie pobierania pliku
         const downloadLink = document.createElement('a');
-        downloadLink.href = data.download_url; // Endpoint z Nginx
-        downloadLink.download = data.converted; // Sugerowana nazwa pliku
+        downloadLink.href = data.download_url;
+        downloadLink.download = data.converted;
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
@@ -98,7 +96,6 @@ function App() {
         setStatus('done');
         setProcessStep('Pobieranie rozpoczęte!');
         
-        // Po chwili wróć do idle, żeby można było coś jeszcze zrobić
         setTimeout(() => setStatus('idle'), 2000);
 
     } catch (err) {
@@ -121,7 +118,7 @@ function App() {
       <Header 
         onUploadClick={handleReset}
         onProcessClick={handleProcess}
-        onConvertClick={handleConvertToWord} // <--- Przekazujemy funkcję
+        onConvertClick={handleConvertToWord}
         processingStatus={status}
         viewMode={viewMode}
         setViewMode={setViewMode}
