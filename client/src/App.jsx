@@ -182,11 +182,11 @@ function App() {
           {files.length === 0 ? (
             <UploadZone onFileSelected={handleFileSelect} multiple={activeTool === 'merge'} />
           ) : (
-            activeTool === 'translate' ? (
+            (activeTool === 'translate' || activeTool === 'convert') ? (
                 <PreviewPane 
                   fileUrl={primaryFile?.url}
-                  translatedFileUrl={translatedFileUrl} 
-                  viewMode={viewMode}
+                  translatedFileUrl={activeTool === 'translate' ? translatedFileUrl : null} 
+                  viewMode={activeTool === 'convert' ? 'single' : viewMode}
                   processingStatus={status}
                   processStep={processStep}
                 />

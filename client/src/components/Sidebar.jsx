@@ -1,5 +1,5 @@
 import React from 'react';
-import { Languages, Combine, Scissors, Clock, ChevronRight, FileText } from 'lucide-react';
+import { Languages, Combine, Scissors, Clock, ChevronRight, FileText, FileType } from 'lucide-react';
 
 const Sidebar = ({ activeTool, setActiveTool, onReset }) => {
   // Mock data historii
@@ -10,6 +10,7 @@ const Sidebar = ({ activeTool, setActiveTool, onReset }) => {
 
   const tools = [
     { id: 'translate', icon: Languages, label: 'Tłumacz (AI)' },
+    { id: 'convert', icon: FileType, label: 'Konwertuj (DOCX)' },
     { id: 'merge', icon: Combine, label: 'Łącz PDF' },
     { id: 'split', icon: Scissors, label: 'Dziel PDF' },
   ];

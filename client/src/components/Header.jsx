@@ -50,6 +50,7 @@ const Header = ({
       </div>
       
       <div className="flex items-center gap-2">
+        {/* Przycisk Uploadu */}
         {activeTool === 'merge' && hasFile ? (
             <label className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-emerald-900/20 hover:bg-emerald-800/40 text-emerald-400 rounded-lg border border-emerald-800/50 transition-all cursor-pointer">
                 <Plus size={16} /> <span>Dodaj kolejne</span>
@@ -61,23 +62,27 @@ const Header = ({
             </button>
         )}
         
+        {/* Przyciski Tłumaczenia */}
         {hasFile && activeTool === 'translate' && (
-            <>
-                <button onClick={() => onProcessClick(selectedLang)} disabled={isProcessing}
-                    className={`flex items-center gap-2 px-6 py-2 text-xs font-bold rounded-lg shadow-lg transition-all border border-transparent
-                    ${isProcessing ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/20 hover:scale-105'}`}>
-                    {isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Play size={16} fill="currentColor"/>}
-                    <span>{isProcessing ? 'PRZETWARZANIE...' : `TŁUMACZ (${selectedLang.toUpperCase()})`}</span>
-                </button>
-
-                <button onClick={onConvertClick} disabled={isProcessing}
-                    className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all border 
-                    ${isProcessing ? 'bg-zinc-800 text-zinc-500 border-zinc-800 cursor-not-allowed' : 'bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border-blue-500/20'}`}>
-                    <FileType size={16} /> <span>DOCX</span>
-                </button>
-            </>
+            <button onClick={() => onProcessClick(selectedLang)} disabled={isProcessing}
+                className={`flex items-center gap-2 px-6 py-2 text-xs font-bold rounded-lg shadow-lg transition-all border border-transparent
+                ${isProcessing ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/20 hover:scale-105'}`}>
+                {isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Play size={16} fill="currentColor"/>}
+                <span>{isProcessing ? 'PRZETWARZANIE...' : `TŁUMACZ (${selectedLang.toUpperCase()})`}</span>
+            </button>
         )}
 
+        {/* Przycisk Konwersji DOCX (NOWY WIDOK) */}
+        {hasFile && activeTool === 'convert' && (
+             <button onClick={onConvertClick} disabled={isProcessing}
+                className={`flex items-center gap-2 px-6 py-2 text-xs font-bold rounded-lg shadow-lg transition-all border border-transparent
+                ${isProcessing ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20 hover:scale-105'}`}>
+                {isProcessing ? <Loader2 size={16} className="animate-spin"/> : <FileType size={16} />}
+                <span>{isProcessing ? 'KONWERSJA...' : `KONWERTUJ DO DOCX`}</span>
+            </button>
+        )}
+
+        {/* Przycisk Merge */}
         {hasFile && activeTool === 'merge' && (
              <button onClick={onMergeClick} disabled={isProcessing || fileCount < 2}
                 className={`flex items-center gap-2 px-6 py-2 text-xs font-bold rounded-lg shadow-lg transition-all border border-transparent
@@ -87,6 +92,7 @@ const Header = ({
             </button>
         )}
 
+        {/* Przycisk Split */}
         {hasFile && activeTool === 'split' && (
              <button onClick={onSplitClick} disabled={isProcessing}
                 className={`flex items-center gap-2 px-6 py-2 text-xs font-bold rounded-lg shadow-lg transition-all border border-transparent
@@ -105,36 +111,39 @@ const Header = ({
             </div>
         )}
         
-        <div className="h-6 w-px bg-zinc-800"></div>
-
+        {/* Ukrywamy separator, jeśli nie ma widocznych narzędzi po prawej stronie */}
         {activeTool === 'translate' && (
-            <div className="relative" ref={settingsRef}>
-                <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`transition-colors ${isSettingsOpen ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                    <Settings size={20} className={isProcessing ? 'animate-spin-slow' : ''} />
-                </button>
+            <>
+                <div className="h-6 w-px bg-zinc-800"></div>
 
-                {isSettingsOpen && (
-                    <div className="absolute right-0 mt-3 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in duration-150">
-                        <div className="px-3 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Język docelowy</div>
-                        {LANGUAGES.map((lang) => (
-                            <button
-                                key={lang.code}
-                                onClick={() => {
-                                    setSelectedLang(lang.code);
-                                    setIsSettingsOpen(false);
-                                }}
-                                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-300 hover:text-white"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <span>{lang.flag}</span>
-                                    {lang.label}
-                                </span>
-                                {selectedLang === lang.code && <Check size={14} className="text-indigo-500" />}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
+                <div className="relative" ref={settingsRef}>
+                    <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`transition-colors ${isSettingsOpen ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                        <Settings size={20} className={isProcessing ? 'animate-spin-slow' : ''} />
+                    </button>
+
+                    {isSettingsOpen && (
+                        <div className="absolute right-0 mt-3 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in duration-150">
+                            <div className="px-3 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Język docelowy</div>
+                            {LANGUAGES.map((lang) => (
+                                <button
+                                    key={lang.code}
+                                    onClick={() => {
+                                        setSelectedLang(lang.code);
+                                        setIsSettingsOpen(false);
+                                    }}
+                                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-300 hover:text-white"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <span>{lang.flag}</span>
+                                        {lang.label}
+                                    </span>
+                                    {selectedLang === lang.code && <Check size={14} className="text-indigo-500" />}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </>
         )}
       </div>
     </header>
