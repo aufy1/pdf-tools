@@ -29,9 +29,6 @@ UPLOAD_DIR = "/app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# -------------------------------------------------------------
-# FUNKCJE POMOCNICZE
-# -------------------------------------------------------------
 def parse_page_ranges(pages_str: str, max_pages: int) -> List[int]:
     """Konwertuje string np. '1-3, 5' na listę indeksów stron (od 0)."""
     pages_to_extract = set()
@@ -48,9 +45,6 @@ def parse_page_ranges(pages_str: str, max_pages: int) -> List[int]:
                 pages_to_extract.add(idx)
     return sorted(list(pages_to_extract))
 
-# -------------------------------------------------------------
-# ENDPOINTY
-# -------------------------------------------------------------
 @app.get("/")
 def read_root():
     return {"status": "Backend is running", "service": "BabelDOC AI Translator"}
