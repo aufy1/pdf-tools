@@ -1,12 +1,11 @@
 import React from 'react';
 import { FileText, Scissors } from 'lucide-react';
 
-const SplitPane = ({ file }) => {
+const SplitPane = ({ file, pagesRange, setPagesRange }) => {
   return (
     <div className="w-full h-full flex flex-col bg-[#0c0c0e] p-8 items-center justify-center animate-in fade-in zoom-in-95 duration-300">
       <div className="max-w-xl w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 relative overflow-hidden shadow-2xl">
         
-        {/* Dekoracyjne tło */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
 
         <div className="flex flex-col items-center text-center space-y-6 relative z-10">
@@ -32,6 +31,8 @@ const SplitPane = ({ file }) => {
                 <span className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Zakres stron (opcjonalnie)</span>
                 <input 
                     type="text" 
+                    value={pagesRange}
+                    onChange={(e) => setPagesRange(e.target.value)}
                     placeholder="np. 1-5, 8, 11-13" 
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/50 transition-all placeholder:text-zinc-700"
                 />

@@ -9,16 +9,17 @@ import SplitPane from './components/SplitPane';
 const API_URL = "/api";
 
 function App() {
-  const [files, setFiles] = useState([]); // Tablica plików: { name, url, rawFile }
+  const [files, setFiles] = useState([]); // table of files { name, url, rawFile }
   const [translatedFileUrl, setTranslatedFileUrl] = useState(null);
   const [viewMode, setViewMode] = useState('split');
   const [status, setStatus] = useState('idle'); // 'idle' | 'uploading' | 'processing' | 'done' | 'error'
   const [processStep, setProcessStep] = useState('');
   const [activeTool, setActiveTool] = useState('translate'); // 'translate' | 'merge' | 'split'
+  const [splitPagesRange, setSplitPagesRange] = useState('');
 
   const primaryFile = files[0];
 
-  // Wgrywanie plików (Drag & Drop lub Input)
+  // drag and drop
   const handleFileSelect = async (selectedFiles) => {
     const filesArray = Array.isArray(selectedFiles) ? selectedFiles : [selectedFiles];
     
@@ -52,16 +53,15 @@ function App() {
     }
   };
 
-  // Dodawanie kolejnych plików (dla łączenia)
   const handleAddMoreFiles = (e) => {
     const selectedFiles = Array.from(e.target.files);
     if (selectedFiles.length > 0) {
       handleFileSelect(selectedFiles);
     }
-    e.target.value = null; // Reset inputa
+    e.target.value = null; // input reset
   };
 
-  // Tłumaczenie
+  // translation
   const handleProcess = async (selectedLang) => {
     if (!primaryFile) return;
     setStatus('processing');
@@ -91,7 +91,7 @@ function App() {
     }
   };
 
-  // Konwersja do Worda
+  // conversion
   const handleConvertToWord = async () => {
     if (!primaryFile) return;
     setStatus('processing');
@@ -119,36 +119,73 @@ function App() {
     }
   };
 
-  // Łączenie PDF (Stub dla backendu)
-  const handleMergePDFs = async () => {
+  // merge
+const handleMergePDFs = async () => {
       if (files.length < 2) return alert("Wybierz co najmniej 2 pliki.");
       setStatus('processing');
       setProcessStep('Łączenie plików PDF...');
       
       try {
-          console.log("Merging:", files.map(f => f.name));
-          // TODO: Fetch na endpoint /merge
-          setTimeout(() => {
-              setStatus('done');
-              setProcessStep('Połączono pomyślnie!');
-          }, 2000);
-      } catch (e) { setStatus('error'); }
+          const res = await fetch(`${API_URL}/merge`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filenames: files.map(f => f.name) })
+          });
+          
+          if (!res.ok) throw new Error("Merge failed");
+          const data = await res.json();
+
+          const downloadLink = document.createElement('a');
+          downloadLink.href = data.download_url;
+          downloadLink.download = data.converted;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+
+          setStatus('done');
+          setProcessStep('Połączono pomyślnie!');
+          setTimeout(() => setStatus('idle'), 2000);
+      } catch (e) { 
+          console.error(e);
+          setStatus('error'); 
+          setProcessStep('Błąd łączenia plików.');
+      }
   };
 
-  // Dzielenie PDF (Stub dla backendu)
+  // split
   const handleSplitPDF = async () => {
       if (!primaryFile) return;
       setStatus('processing');
       setProcessStep('Dzielenie pliku PDF...');
       
       try {
-          console.log("Splitting:", primaryFile.name);
-          // TODO: Fetch na endpoint /split
-          setTimeout(() => {
-              setStatus('done');
-              setProcessStep('Plik został podzielony!');
-          }, 2000);
-      } catch (e) { setStatus('error'); }
+          const res = await fetch(`${API_URL}/split`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  filename: primaryFile.name,
+                  pages: splitPagesRange
+              })
+          });
+
+          if (!res.ok) throw new Error("Split failed");
+          const data = await res.json();
+
+          const downloadLink = document.createElement('a');
+          downloadLink.href = data.download_url;
+          downloadLink.download = data.converted;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+
+          setStatus('done');
+          setProcessStep('Plik został podzielony!');
+          setTimeout(() => setStatus('idle'), 2000);
+      } catch (e) { 
+          console.error(e);
+          setStatus('error'); 
+          setProcessStep('Błąd cięcia pliku.');
+      }
   };
 
   const handleReset = () => {
@@ -193,7 +230,11 @@ function App() {
             ) : activeTool === 'merge' ? (
                 <MergePane files={files} setFiles={setFiles} />
             ) : (
-                <SplitPane file={primaryFile} />
+                <SplitPane 
+                    file={primaryFile} 
+                    pagesRange={splitPagesRange} 
+                    setPagesRange={setSplitPagesRange} 
+                />
             )
           )}
         </main>
